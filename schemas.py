@@ -1,19 +1,17 @@
 from pydantic import BaseModel
+from typing import Optional
 from datetime import datetime
 
-# Yeh define karta hai ki API mein error data kaise aana chahiye
 class ErrorCreate(BaseModel):
     service_name: str
-    error_message: str
-    severity: str = "medium"  # Default medium hai
-
-# Yeh response mein kya bhejenge
-class ErrorResponse(BaseModel):
-    id: int
-    service_name: str
-    error_message: str
+    error_type: str
+    message: str
     severity: str
-    timestamp: datetime
+    stack_trace: Optional[str] = None
+
+class ErrorOut(ErrorCreate):
+    id: int
+    occurred_at: datetime
 
     class Config:
         from_attributes = True

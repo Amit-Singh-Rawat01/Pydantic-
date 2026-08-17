@@ -7,7 +7,8 @@ class Error(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     service_name = Column(String, nullable=False)
-    error_message = Column(Text, nullable=False)
-    severity = Column(String, default="medium")
-    timestamp = Column(DateTime, default=func.now())
-    
+    error_type = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    severity = Column(String, nullable=False)
+    stack_trace = Column(Text, nullable=True)
+    occurred_at = Column(DateTime, default=func.now())

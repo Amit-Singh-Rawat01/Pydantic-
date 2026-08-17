@@ -1,13 +1,15 @@
-import psycopg2
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
 
-DB_CONFIG = {
-    "host": "localhost",
-    "port": 5432,
-    "database": "error_intel",
-    "user": "postgres",
-    "password": "54321"
-}
+DATABASE_URL = "postgresql://postgres:54321@localhost:5432/error_intel"
 
-def get_connection():
-    conn = psycopg2.connect(**DB_CONFIG)
-    return conn
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

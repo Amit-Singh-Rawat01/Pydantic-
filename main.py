@@ -1,98 +1,60 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Optional
+from fastapi import FastAPI, HTTPException, Depends
+from sqlalchemy.orm import Session
 from datetime import datetime
-import database  # Day 3 ki file
+from database import engine, Base, get_db
+import models
+import schemas
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Error Intelligence Platform")
 
+VALID_SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
-# ---- PYDANTIC MODEL ----
-# Yeh blueprint hai incoming error data ka
-class ErrorEvent(BaseModel):
-    service_name: str
-    error_type: str
-    message: str
-    severity: str  # LOW, MEDIUM, HIGH, CRITICAL
-    stack_trace: Optional[str] = None  # optional field
-
-
-# ---- HEALTH CHECK (Day 2 se) ----
 @app.get("/health")
 def health_check():
     return {"status": "running", "timestamp": datetime.utcnow().isoformat()}
 
-
-# ---- POST /errors — Error receive karo aur save karo ----
 @app.post("/errors")
-def collect_error(error: ErrorEvent):
-    # Step 1: Database connection lo
-    conn = database.get_connection()
-    cursor = conn.cursor()
-
-    # Step 2: Validate severity
-    valid_severities = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
-    if error.severity.upper() not in valid_severities:
+def collect_error(error: schemas.ErrorCreate, db: Session = Depends(get_db)):
+    if error.severity.upper() not in VALID_SEVERITIES:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid severity. Must be one of: {valid_severities}"
+            detail=f"Invalid severity. Must be one of: {VALID_SEVERITIES}"
         )
 
-    # Step 3: Database mein insert karo
-    cursor.execute("""
-        INSERT INTO errors (service_name, error_type, message, severity, stack_trace)
-        VALUES (%s, %s, %s, %s, %s)
-        RETURNING id, occurred_at
-    """, (
-        error.service_name,
-        error.error_type,
-        error.message,
-        error.severity.upper(),
-        error.stack_trace
-    ))
+    db_error = models.Error(
+        service_name=error.service_name,
+        error_type=error.error_type,
+        message=error.message,
+        severity=error.severity.upper(),
+        stack_trace=error.stack_trace
+    )
+    db.add(db_error)
+    db.commit()
+    db.refresh(db_error)
 
-    # Step 4: Naya record ka data lo (id aur timestamp)
-    result = cursor.fetchone()
-    conn.commit()  # changes save karo
-    cursor.close()
-    conn.close()
-
-    # Step 5: Response bhejo
     return {
         "success": True,
         "message": "Error recorded successfully",
-        "error_id": result[0],
-        "occurred_at": result[1].isoformat()
+        "error_id": db_error.id,
+        "occurred_at": db_error.occurred_at.isoformat()
     }
 
-
-# ---- GET /errors — Saved errors dekho ----
 @app.get("/errors")
-def get_errors():
-    conn = database.get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT id, service_name, error_type, message, severity, occurred_at
-        FROM errors
-        ORDER BY occurred_at DESC
-        LIMIT 50
-    """)
-
-    rows = cursor.fetchall()
-    cursor.close()
-    conn.close()
-
-    # Rows ko readable format mein convert karo
-    errors = []
-    for row in rows:
-        errors.append({
-            "id": row[0],
-            "service_name": row[1],
-            "error_type": row[2],
-            "message": row[3],
-            "severity": row[4],
-            "occurred_at": row[5].isoformat()
-        })
-
-    return {"total": len(errors), "errors": errors}
+def get_errors(db: Session = Depends(get_db)):
+    errors = db.query(models.Error).order_by(models.Error.occurred_at.desc()).limit(50).all()
+    return {
+        "total": len(errors),
+        "errors": [
+            {
+                "id": e.id,
+                "service_name": e.service_name,
+                "error_type": e.error_type,
+                "message": e.message,
+                "severity": e.severity,
+                "occurred_at": e.occurred_at.isoformat()
+            }
+            for e in errors
+        ]
+    }
