@@ -2,6 +2,9 @@ from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy.orm import Session
 from datetime import datetime
 from database import engine, Base, get_db
+from typing import Optional
+from fastapi import Query
+from sqlalchemy import desc
 import models
 import schemas
 
@@ -42,10 +45,29 @@ def collect_error(error: schemas.ErrorCreate, db: Session = Depends(get_db)):
     }
 
 @app.get("/errors")
-def get_errors(db: Session = Depends(get_db)):
-    errors = db.query(models.Error).order_by(models.Error.occurred_at.desc()).limit(50).all()
+def get_errors(
+    service_name: Optional[str] = None,
+    severity: Optional[str] = None,
+    limit: int = Query(default=20, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db)
+):
+    query = db.query(models.Error)
+
+    if service_name:
+        query = query.filter(models.Error.service_name == service_name)
+    if severity:
+        query = query.filter(models.Error.severity == severity.upper())
+
+    query = query.order_by(models.Error.occurred_at.desc())
+
+    total = query.count()
+    errors = query.offset(offset).limit(limit).all()
+
     return {
-        "total": len(errors),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
         "errors": [
             {
                 "id": e.id,
