@@ -1,10 +1,11 @@
 from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 from database import engine, Base, get_db
 from typing import Optional
 from fastapi import Query
 from sqlalchemy import desc
+from sqlalchemy import func
 import models
 import schemas
 
@@ -80,3 +81,40 @@ def get_errors(
             for e in errors
         ]
     }
+@app.get("/errors/stats", response_model=schemas.ErrorStats)
+def get_error_stats(db: Session = Depends(get_db)):
+    total = db.query(models.Error).count()
+
+    severity_rows = (
+        db.query(models.Error.severity, func.count(models.Error.id))
+        .group_by(models.Error.severity)
+        .all()
+    )
+
+    by_severity = {
+        severity: count
+        for severity, count in severity_rows
+    }
+    service_rows = (
+        db.query(models.Error.service_name, func.count(models.Error.id))
+        .group_by(models.Error.service_name)
+        .all()
+    )
+
+    by_service = {
+        service: count
+        for service, count in service_rows
+    }
+    one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+
+    last_hour_count = (
+        db.query(models.Error)
+        .filter(models.Error.occurred_at >= one_hour_ago)
+        .count()
+    )
+    return schemas.ErrorStats(
+        total_errors=total,
+        by_severity=by_severity,
+        by_service=by_service,
+        last_hour_count=last_hour_count
+    )

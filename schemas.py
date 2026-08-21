@@ -15,3 +15,9 @@ class ErrorOut(ErrorCreate):
 
     class Config:
         from_attributes = True
+
+class ErrorStats(BaseModel):
+    total_errors: int
+    by_severity: dict[str, int]
+    by_service: dict[str, int]
+    last_hour_count: int
