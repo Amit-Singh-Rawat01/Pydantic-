@@ -8,6 +8,7 @@ from sqlalchemy import desc
 from sqlalchemy import func
 import models
 import schemas
+from producer import send_error_to_kafka
 
 Base.metadata.create_all(bind=engine)
 
@@ -19,31 +20,34 @@ VALID_SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 def health_check():
     return {"status": "running", "timestamp": datetime.utcnow().isoformat()}
 
+
 @app.post("/errors")
-def collect_error(error: schemas.ErrorCreate, db: Session = Depends(get_db)):
+def collect_error(error: schemas.ErrorCreate):  # Note: 'db: Session' remove kar diya hai
+    # 1. Validation logic wahi rahega (Bad request check)
     if error.severity.upper() not in VALID_SEVERITIES:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid severity. Must be one of: {VALID_SEVERITIES}"
         )
 
-    db_error = models.Error(
-        service_name=error.service_name,
-        error_type=error.error_type,
-        message=error.message,
-        severity=error.severity.upper(),
-        stack_trace=error.stack_trace
-    )
-    db.add(db_error)
-    db.commit()
-    db.refresh(db_error)
+    # 2. Schema ko Dictionary mein convert karo
+    error_dict = error.model_dump()  # Agar Pydantic v1 hai to error.dict() use karna
+    error_dict["severity"] = error.severity.upper()
 
-    return {
-        "success": True,
-        "message": "Error recorded successfully",
-        "error_id": db_error.id,
-        "occurred_at": db_error.occurred_at.isoformat()
-    }
+    # 3. Direct DB write ki jagah Kafka ko bhej rahe hain
+    success = send_error_to_kafka(error_dict)
+
+    # 4. Agar Kafka tak nahi pahuncha to 500 error throw karo
+    if not success:
+        raise HTTPException(
+            status_code=500, 
+            detail="Failed to queue error to Kafka"
+        )
+
+    # 5. Success response return karo
+    return {"status": "queued", "message": "Error queued successfully"}
+
+   
 
 @app.get("/errors")
 def get_errors(

@@ -28,13 +28,13 @@ for message in consumer:
             raise ValueError("Kafka message is not a valid dictionary")
 
         db = SessionLocal()
-
         db_error = models.Error(
-            service_name=error_data.get("service"),
-            error_type="KafkaError",
+            service_name=error_data.get("service_name"),
+            error_type=error_data.get("error_type"),
             message=error_data.get("message"),
-            severity=error_data.get("level"),
+            severity=error_data.get("severity"),
             stack_trace=error_data.get("stack_trace")
+
         )
 
         db.add(db_error)
