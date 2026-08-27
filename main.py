@@ -1,27 +1,43 @@
 from datetime import datetime, timedelta
 from typing import Optional
+
 from database import Base, engine, get_db
 from fastapi import Depends, FastAPI, HTTPException, Query
-import models
-from producer import send_error_to_kafka
-import redis  
-import schemas
-from sqlalchemy import desc, func
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+import models
+import redis
+import schemas
+import os
+from producer import send_error_to_kafka
+
+
+
+# Create database tables
 Base.metadata.create_all(bind=engine)
+
 
 app = FastAPI(title="Error Intelligence Platform")
 
-# <--- 2. Redis Connection Setup
-r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+# Redis Connection Setup
+r = redis.Redis(
+    host=os.getenv("REDIS_HOST", "localhost"),
+    port=6379,
+    decode_responses=True,
+)
+
 
 VALID_SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
 
 @app.get("/health")
 def health_check():
-    return {"status": "running", "timestamp": datetime.utcnow().isoformat()}
+    return {
+        "status": "running",
+        "timestamp": datetime.utcnow().isoformat(),
+    }
 
 
 @app.post("/errors")
@@ -39,10 +55,14 @@ def collect_error(error: schemas.ErrorCreate):
 
     if not success:
         raise HTTPException(
-            status_code=500, detail="Failed to queue error to Kafka"
+            status_code=500,
+            detail="Failed to queue error to Kafka",
         )
 
-    return {"status": "queued", "message": "Error queued successfully"}
+    return {
+        "status": "queued",
+        "message": "Error queued successfully",
+    }
 
 
 @app.get("/errors")
@@ -56,11 +76,18 @@ def get_errors(
     query = db.query(models.Error)
 
     if service_name:
-        query = query.filter(models.Error.service_name == service_name)
-    if severity:
-        query = query.filter(models.Error.severity == severity.upper())
+        query = query.filter(
+            models.Error.service_name == service_name
+        )
 
-    query = query.order_by(models.Error.occurred_at.desc())
+    if severity:
+        query = query.filter(
+            models.Error.severity == severity.upper()
+        )
+
+    query = query.order_by(
+        models.Error.occurred_at.desc()
+    )
 
     total = query.count()
     errors = query.offset(offset).limit(limit).all()
@@ -77,6 +104,7 @@ def get_errors(
                 "message": e.message,
                 "severity": e.severity,
                 "occurred_at": e.occurred_at.isoformat(),
+                "fingerprint": e.fingerprint,
             }
             for e in errors
         ],
@@ -84,30 +112,49 @@ def get_errors(
 
 
 @app.get("/errors/stats", response_model=schemas.ErrorStats)
-def get_error_stats(db: Session = Depends(get_db)):
+def get_error_stats(
+    db: Session = Depends(get_db),
+):
     total = db.query(models.Error).count()
 
     severity_rows = (
-        db.query(models.Error.severity, func.count(models.Error.id))
+        db.query(
+            models.Error.severity,
+            func.count(models.Error.id),
+        )
         .group_by(models.Error.severity)
         .all()
     )
 
-    by_severity = {severity: count for severity, count in severity_rows}
+    by_severity = {
+        severity: count
+        for severity, count in severity_rows
+    }
+
     service_rows = (
-        db.query(models.Error.service_name, func.count(models.Error.id))
+        db.query(
+            models.Error.service_name,
+            func.count(models.Error.id),
+        )
         .group_by(models.Error.service_name)
         .all()
     )
 
-    by_service = {service: count for service, count in service_rows}
+    by_service = {
+        service: count
+        for service, count in service_rows
+    }
+
     one_hour_ago = datetime.utcnow() - timedelta(hours=1)
 
     last_hour_count = (
         db.query(models.Error)
-        .filter(models.Error.occurred_at >= one_hour_ago)
+        .filter(
+            models.Error.occurred_at >= one_hour_ago
+        )
         .count()
     )
+
     return schemas.ErrorStats(
         total_errors=total,
         by_severity=by_severity,
@@ -116,10 +163,61 @@ def get_error_stats(db: Session = Depends(get_db)):
     )
 
 
-# <--- 3. NAYA REDIS ENDPOINT (Subse neoche add kiya hai)
 @app.get("/stats")
 def get_stats():
     total = r.get("errors:total") or 0
-    minute_key = f"errors:minute:{datetime.utcnow().strftime('%Y%m%d%H%M')}"
+
+    minute_key = (
+        f"errors:minute:"
+        f"{datetime.utcnow().strftime('%Y%m%d%H%M')}"
+    )
+
     last_minute = r.get(minute_key) or 0
-    return {"total_errors": int(total), "errors_last_minute": int(last_minute)}
+
+    return {
+        "total_errors": int(total),
+        "errors_last_minute": int(last_minute),
+    }
+
+
+# Day 15: Group errors by fingerprint
+@app.get("/errors/groups")
+def get_error_groups(
+    db: Session = Depends(get_db),
+):
+    results = (
+        db.query(
+            models.Error.fingerprint,
+            models.Error.service_name,
+            models.Error.error_type,
+            func.count(models.Error.id).label("count"),
+            func.max(
+                models.Error.occurred_at
+            ).label("last_seen"),
+        )
+        .group_by(
+            models.Error.fingerprint,
+            models.Error.service_name,
+            models.Error.error_type,
+        )
+        .order_by(
+            func.count(models.Error.id).desc()
+        )
+        .all()
+    )
+
+    return [
+        {
+            "fingerprint": r.fingerprint,
+            "service_name": r.service_name,
+            "error_type": r.error_type,
+            "count": r.count,
+            "last_seen": (
+                r.last_seen.isoformat()
+                if r.last_seen
+                else None
+            ),
+        }
+        for r in results
+    ]
+

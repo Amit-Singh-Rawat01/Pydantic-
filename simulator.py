@@ -54,7 +54,7 @@ def generate_fake_error():
 
 def send_error(error):
     try:
-        response = requests.post(API_URL, json=error)
+        response = requests.post(API_URL, json=error, timeout=3)
 
         if response.status_code in (200, 201):
             print(
@@ -81,3 +81,13 @@ def run_simulator(num_errors=20, delay_seconds=1):
 
 if __name__ == "__main__":
     run_simulator(num_errors=20, delay_seconds=1)
+
+def send_error(error):
+    try:
+        response = requests.post(API_URL, json=error, timeout=3)
+        if response.status_code == 200:
+            print("[SENT] Error queued successfully")
+        else:
+            print(f"[FAILED] Status {response.status_code}: {response.text}")
+    except requests.exceptions.RequestException as e:
+        print(f"[TIMEOUT] Backend took too long to respond")

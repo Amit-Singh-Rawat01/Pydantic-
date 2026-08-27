@@ -12,3 +12,4 @@ class Error(Base):
     severity = Column(String, nullable=False)
     stack_trace = Column(Text, nullable=True)
     occurred_at = Column(DateTime, default=func.now())
+    fingerprint = Column(String, index=True)  
