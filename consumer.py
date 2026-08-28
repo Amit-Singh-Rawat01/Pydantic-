@@ -3,34 +3,31 @@ import os
 from datetime import datetime
 
 from kafka import KafkaConsumer
-import redis
+from redis_client import redis_client
 
 from database import SessionLocal
 import models
 from fingerprint import generate_fingerprint
 
-
-r = redis.Redis(
-    host=os.getenv("REDIS_HOST", "localhost"),
-    port=6379,
-    decode_responses=True,
-)
+import time
 
 
-def update_realtime_counters():
-    r.incr("errors:total")
 
-    minute_key = (
-        f"errors:minute:{datetime.utcnow().strftime('%Y%m%d%H%M')}"
-    )
+def update_realtime_counters(service_name):
+    redis_client.incr("errors:total")
 
-    r.incr(minute_key)
-    r.expire(minute_key, 120)
+    minute_bucket = int(time.time() // 60)
+    minute_key = f"errors:minute:{minute_bucket}"
+
+    redis_client.incr(minute_key)
+    redis_client.expire(minute_key, 120)
+
+    redis_client.incr(f"errors:service:{service_name}")
 
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv(
     "KAFKA_BOOTSTRAP_SERVERS",
-    "localhost:9092",
+    "localhost:29092",
 )
 
 
@@ -86,7 +83,10 @@ for message in consumer:
             f"Fingerprint: {fp}"
         )
 
-        update_realtime_counters()
+        update_realtime_counters(
+        error_data["service_name"]
+        )
+        
 
         print("Redis counters updated.")
 
