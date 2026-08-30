@@ -12,6 +12,9 @@ import schemas
 import os
 from producer import send_error_to_kafka
 
+from fastapi.middleware.cors import CORSMiddleware
+
+
 
 
 # Create database tables
@@ -19,6 +22,14 @@ Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI(title="Error Intelligence Platform")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # Redis Connection Setup
