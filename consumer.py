@@ -10,6 +10,7 @@ import models
 from fingerprint import generate_fingerprint
 
 import time
+from incident_detector import check_and_create_incident
 
 
 
@@ -77,6 +78,13 @@ for message in consumer:
 
         db.add(new_error)
         db.commit()
+
+        check_and_create_incident(
+        db,
+        new_error.service_name,
+        new_error.error_type,
+        new_error.severity
+)
 
         print(
             f"Saved to DB successfully. "

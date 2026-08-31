@@ -13,7 +13,7 @@ import os
 from producer import send_error_to_kafka
 
 from fastapi.middleware.cors import CORSMiddleware
-
+from models import Error, Incident
 
 
 
@@ -232,3 +232,36 @@ def get_error_groups(
         for r in results
     ]
 
+@app.get("/incidents")
+def get_incidents(
+    status: str = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(Incident)
+
+    if status:
+        query = query.filter(
+            Incident.status == status
+        )
+
+    return query.order_by(
+        Incident.last_occurred_at.desc()
+    ).all()
+
+
+@app.get("/incidents/{incident_id}")
+def get_incident(
+    incident_id: int,
+    db: Session = Depends(get_db)
+):
+    incident = db.query(Incident).filter(
+        Incident.id == incident_id
+    ).first()
+
+    if not incident:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found"
+        )
+
+    return incident
