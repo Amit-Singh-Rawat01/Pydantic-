@@ -64,8 +64,8 @@ def send_error(error):
         else:
             print(f"[FAILED] Status {response.status_code}: {response.text}")
 
-    except requests.exceptions.ConnectionError:
-        print("[ERROR] FastAPI server se connect nahi ho paya.")
+    except requests.exceptions.RequestException as e:
+        print(f"[ERROR] Backend connection failed: {str(e)}")
 
 
 def run_simulator(num_errors=20, delay_seconds=1):
@@ -81,13 +81,3 @@ def run_simulator(num_errors=20, delay_seconds=1):
 
 if __name__ == "__main__":
     run_simulator(num_errors=20, delay_seconds=1)
-
-def send_error(error):
-    try:
-        response = requests.post(API_URL, json=error, timeout=3)
-        if response.status_code == 200:
-            print("[SENT] Error queued successfully")
-        else:
-            print(f"[FAILED] Status {response.status_code}: {response.text}")
-    except requests.exceptions.RequestException as e:
-        print(f"[TIMEOUT] Backend took too long to respond")
