@@ -12,22 +12,39 @@ interface ErrorItem {
 function ErrorsList() {
   const [errors, setErrors] = useState<ErrorItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
-  fetch("http://localhost:8000/errors")
-    .then((response) => response.json())
-    .then((data) => {
-      console.log("BACKEND DATA:", data);
-      console.log("ERRORS ARRAY:", data.errors);
+    const fetchErrors = () => {
+      fetch("http://localhost:8000/errors")
+        .then((response) => response.json())
+        .then((data) => {
+          console.log("BACKEND DATA:", data);
+          console.log("ERRORS ARRAY:", data.errors);
 
-      setErrors(data.errors);
-      setLoading(false);
-    })
-    .catch((error) => {
-      console.error("FETCH ERROR:", error);
-      setLoading(false);
-    });
-}, []);
+          console.log("UPDATING UI:", data.errors.length, new Date().toLocaleTimeString());
+
+          setErrors(data.errors);
+          setLastUpdated(new Date());
+          setLoading(false);
+        })
+        .catch((error) => {
+          console.error("FETCH ERROR:", error);
+          setLoading(false);
+        });
+    };
+
+    // Pehli baar immediately fetch
+    fetchErrors();
+
+    // Har 5 second mein fetch
+    const interval = setInterval(() => {
+      fetchErrors();
+    }, 5000);
+
+    // Component unmount hone par interval band
+    return () => clearInterval(interval);
+  }, []);
 
   if (loading) {
     return <p className="p-6">Loading...</p>;
@@ -45,6 +62,10 @@ function ErrorsList() {
       <h1 className="mb-4 text-2xl font-bold">
         Live Errors
       </h1>
+
+      <p className="mb-4 text-xs text-gray-400">
+        Last updated: {lastUpdated?.toLocaleTimeString()}
+      </p>
 
       <table className="w-full border-collapse">
         <thead>
