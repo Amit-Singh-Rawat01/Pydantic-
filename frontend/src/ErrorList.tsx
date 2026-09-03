@@ -19,20 +19,25 @@ const severityColor: Record<string, string> = {
 function ErrorList() {
   const [errors, setErrors] = useState<ErrorItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     axios.get('http://localhost:8000/errors')
       .then((res) => {
-        setErrors(res.data.errors)
+        setErrors(Array.isArray(res.data.errors) ? res.data.errors : [])
+        setError('')
         setLoading(false)
       })
       .catch((err) => {
         console.error('Fetch failed:', err)
+        setError('Unable to load errors. Is the API running on localhost:8000?')
         setLoading(false)
       })
   }, [])
 
   if (loading) return <p className="p-4">Loading errors...</p>
+
+  if (error) return <p className="p-4 text-red-600">{error}</p>
 
   return (
     <div className="p-6">
@@ -59,6 +64,11 @@ function ErrorList() {
               <td className="p-2">{new Date(err.occurred_at).toLocaleString()}</td>
             </tr>
           ))}
+          {errors.length === 0 && (
+            <tr>
+              <td className="p-2 text-gray-500" colSpan={4}>No errors found.</td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

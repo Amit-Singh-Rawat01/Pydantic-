@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import useAutoRefresh from "../hooks/useAutoRefresh";
 
 interface ErrorItem {
   id: number;
@@ -10,44 +10,26 @@ interface ErrorItem {
 }
 
 function ErrorsList() {
-  const [errors, setErrors] = useState<ErrorItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const {
+    data: errorsData,
+    loading,
+    error,
+  } = useAutoRefresh(
+    () =>
+      fetch("http://localhost:8000/errors").then((response) =>
+        response.json()
+      ),
+    5000
+  );
 
-  useEffect(() => {
-    const fetchErrors = () => {
-      fetch("http://localhost:8000/errors")
-        .then((response) => response.json())
-        .then((data) => {
-          console.log("BACKEND DATA:", data);
-          console.log("ERRORS ARRAY:", data.errors);
-
-          console.log("UPDATING UI:", data.errors.length, new Date().toLocaleTimeString());
-
-          setErrors(data.errors);
-          setLastUpdated(new Date());
-          setLoading(false);
-        })
-        .catch((error) => {
-          console.error("FETCH ERROR:", error);
-          setLoading(false);
-        });
-    };
-
-    // Pehli baar immediately fetch
-    fetchErrors();
-
-    // Har 5 second mein fetch
-    const interval = setInterval(() => {
-      fetchErrors();
-    }, 5000);
-
-    // Component unmount hone par interval band
-    return () => clearInterval(interval);
-  }, []);
+  const errors: ErrorItem[] = errorsData?.errors ?? [];
 
   if (loading) {
     return <p className="p-6">Loading...</p>;
+  }
+
+  if (error) {
+    return <p className="p-6 text-red-600">{error}</p>;
   }
 
   const severityColor: Record<string, string> = {
@@ -64,7 +46,7 @@ function ErrorsList() {
       </h1>
 
       <p className="mb-4 text-xs text-gray-400">
-        Last updated: {lastUpdated?.toLocaleTimeString()}
+        Auto-refreshing every 5 seconds
       </p>
 
       <table className="w-full border-collapse">
