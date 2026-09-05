@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -175,19 +176,64 @@ def get_error_stats(
 
 
 @app.get("/stats")
-def get_stats():
-    total = r.get("errors:total") or 0
+def get_stats(db: Session = Depends(get_db)):
+    total_errors = db.query(models.Error).count()
 
-    minute_key = (
-        f"errors:minute:"
-        f"{datetime.utcnow().strftime('%Y%m%d%H%M')}"
+    one_minute_ago = datetime.utcnow() - timedelta(minutes=1)
+    errors_per_minute = (
+        db.query(models.Error)
+        .filter(models.Error.occurred_at >= one_minute_ago)
+        .count()
     )
 
-    last_minute = r.get(minute_key) or 0
+    active_incidents = db.query(Incident).count()
+    has_critical = (
+        db.query(Incident)
+        .filter(Incident.severity == "CRITICAL")
+        .first()
+        is not None
+    )
+
+    if active_incidents == 0:
+        system_health = "HEALTHY"
+    elif has_critical:
+        system_health = "CRITICAL"
+    else:
+        system_health = "WARNING"
 
     return {
-        "total_errors": int(total),
-        "errors_last_minute": int(last_minute),
+        "total_errors": total_errors,
+        "errors_per_minute": errors_per_minute,
+        "active_incidents": active_incidents,
+        "system_health": system_health,
+    }
+
+
+@app.get("/stats/timeline")
+def get_error_timeline(db: Session = Depends(get_db)):
+    now = datetime.utcnow()
+    time_window_start = now - timedelta(minutes=15)
+    errors = (
+        db.query(Error)
+        .filter(Error.occurred_at >= time_window_start)
+        .all()
+    )
+
+    minute_counts = defaultdict(int)
+    for minutes_ago in range(14, -1, -1):
+        minute_key = (now - timedelta(minutes=minutes_ago)).strftime("%H:%M")
+        minute_counts[minute_key] = 0
+
+    for error in errors:
+        minute_key = error.occurred_at.strftime("%H:%M")
+        if minute_key in minute_counts:
+            minute_counts[minute_key] += 1
+
+    return {
+        "timeline": [
+            {"minute": minute, "count": count}
+            for minute, count in minute_counts.items()
+        ]
     }
 
 

@@ -1,4 +1,3 @@
-
 export function getSeverityClass(severity: string) {
   switch (severity.toLowerCase()) {
     case 'critical': return 'bg-red-100 text-red-700 px-2 py-1 rounded';
