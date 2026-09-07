@@ -209,6 +209,46 @@ def get_stats(db: Session = Depends(get_db)):
     }
 
 
+@app.get("/stats/by-service")
+def get_errors_by_service(db: Session = Depends(get_db)):
+    since = datetime.utcnow() - timedelta(minutes=15)
+    results = (
+        db.query(
+            Error.service_name,
+            func.count(Error.id).label("count"),
+        )
+        .filter(Error.occurred_at >= since)
+        .group_by(Error.service_name)
+        .order_by(func.count(Error.id).desc())
+        .all()
+    )
+
+    return [
+        {"service_name": service_name, "count": count}
+        for service_name, count in results
+    ]
+
+
+@app.get("/stats/severity-breakdown")
+def get_severity_breakdown(db: Session = Depends(get_db)):
+    since = datetime.utcnow() - timedelta(minutes=15)
+    results = (
+        db.query(
+            Error.severity,
+            func.count(Error.id).label("count"),
+        )
+        .filter(Error.occurred_at >= since)
+        .group_by(Error.severity)
+        .order_by(func.count(Error.id).desc())
+        .all()
+    )
+
+    return [
+        {"severity": severity, "count": count}
+        for severity, count in results
+    ]
+
+
 @app.get("/stats/timeline")
 def get_error_timeline(db: Session = Depends(get_db)):
     now = datetime.utcnow()
