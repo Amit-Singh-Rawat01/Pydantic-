@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 load_dotenv()
@@ -23,6 +23,28 @@ SessionLocal = sessionmaker(
 )
 
 Base = declarative_base()
+
+
+def ensure_error_fingerprint_column():
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE errors "
+                "ADD COLUMN IF NOT EXISTS fingerprint VARCHAR"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE errors SET fingerprint = "
+                "left(md5(service_name || ':' || error_type), 12)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_errors_fingerprint "
+                "ON errors (fingerprint)"
+            )
+        )
 
 
 def get_db():

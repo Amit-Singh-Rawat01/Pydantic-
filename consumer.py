@@ -61,7 +61,6 @@ for message in consumer:
         fp = generate_fingerprint(
             service_name=error_data["service_name"],
             error_type=error_data["error_type"],
-            message=error_data["message"],
         )
 
         db = SessionLocal()

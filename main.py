@@ -2,7 +2,12 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Optional
 
-from database import Base, engine, get_db
+from database import (
+    Base,
+    engine,
+    ensure_error_fingerprint_column,
+    get_db,
+)
 from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -20,6 +25,7 @@ from models import Error, Incident
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+ensure_error_fingerprint_column()
 
 
 app = FastAPI(title="Error Intelligence Platform")
@@ -277,8 +283,8 @@ def get_error_timeline(db: Session = Depends(get_db)):
     }
 
 
-# Day 15: Group errors by fingerprint
-@app.get("/errors/groups")
+# Day 26: Group errors by fingerprint
+@app.get("/error-groups")
 def get_error_groups(
     db: Session = Depends(get_db),
 ):
@@ -288,6 +294,9 @@ def get_error_groups(
             models.Error.service_name,
             models.Error.error_type,
             func.count(models.Error.id).label("count"),
+            func.min(
+                models.Error.occurred_at
+            ).label("first_seen"),
             func.max(
                 models.Error.occurred_at
             ).label("last_seen"),
@@ -309,6 +318,11 @@ def get_error_groups(
             "service_name": r.service_name,
             "error_type": r.error_type,
             "count": r.count,
+            "first_seen": (
+                r.first_seen.isoformat()
+                if r.first_seen
+                else None
+            ),
             "last_seen": (
                 r.last_seen.isoformat()
                 if r.last_seen
@@ -317,6 +331,13 @@ def get_error_groups(
         }
         for r in results
     ]
+
+
+@app.get("/errors/groups", include_in_schema=False)
+def get_legacy_error_groups(
+    db: Session = Depends(get_db),
+):
+    return get_error_groups(db)
 
 @app.get("/incidents")
 def get_incidents(
