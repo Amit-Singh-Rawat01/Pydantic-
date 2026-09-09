@@ -20,6 +20,7 @@ class Incident(Base):
     __tablename__ = "incidents"
 
     id = Column(Integer, primary_key=True, index=True)
+    fingerprint = Column(String, index=True, nullable=True)
     service_name = Column(String, nullable=False)
     error_type = Column(String, nullable=False)
     severity = Column(String, nullable=False)

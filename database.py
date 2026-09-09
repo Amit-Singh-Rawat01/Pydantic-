@@ -47,6 +47,22 @@ def ensure_error_fingerprint_column():
         )
 
 
+def ensure_incident_fingerprint_column():
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE incidents "
+                "ADD COLUMN IF NOT EXISTS fingerprint VARCHAR"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_incidents_fingerprint "
+                "ON incidents (fingerprint)"
+            )
+        )
+
+
 def get_db():
     db = SessionLocal()
     try:

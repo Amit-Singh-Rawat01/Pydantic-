@@ -6,6 +6,7 @@ from database import (
     Base,
     engine,
     ensure_error_fingerprint_column,
+    ensure_incident_fingerprint_column,
     get_db,
 )
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -26,6 +27,7 @@ from models import Error, Incident
 # Create database tables
 Base.metadata.create_all(bind=engine)
 ensure_error_fingerprint_column()
+ensure_incident_fingerprint_column()
 
 
 app = FastAPI(title="Error Intelligence Platform")

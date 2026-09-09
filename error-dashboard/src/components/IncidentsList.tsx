@@ -3,6 +3,7 @@ import { getSeverityClass, getStatusClass } from '../utils/badges';
 
 interface Incident {
   id: number;
+  fingerprint: string | null;
   service_name: string;
   error_type: string;
   severity: string;
@@ -30,6 +31,7 @@ function IncidentsList() {
         <thead>
           <tr>
             <th>ID</th>
+            <th>Fingerprint</th>
             <th>Service</th>
             <th>Severity</th>
             <th>Status</th>
@@ -42,6 +44,7 @@ function IncidentsList() {
           {incidents.map((incident) => (
             <tr key={incident.id}>
               <td>{incident.id}</td>
+              <td>{incident.fingerprint ?? '-'}</td>
               <td>{incident.service_name}</td>
               <td><span className={getSeverityClass(incident.severity)}>{incident.severity}</span></td>
               <td><span className={getStatusClass(incident.status.toLowerCase())}>{incident.status}</span></td>
