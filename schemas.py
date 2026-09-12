@@ -21,3 +21,19 @@ class ErrorStats(BaseModel):
     by_severity: dict[str, int]
     by_service: dict[str, int]
     last_hour_count: int
+
+
+class IncidentResponse(BaseModel):
+    id: int
+    fingerprint: str
+    service_name: str
+    error_type: str
+    sample_message: str | None
+    occurrence_count: int
+    first_seen: datetime
+    last_seen: datetime
+    status: str
+    severity: str
+
+    class Config:
+        from_attributes = True

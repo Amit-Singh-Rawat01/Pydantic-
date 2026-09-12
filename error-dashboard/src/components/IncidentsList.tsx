@@ -6,11 +6,12 @@ interface Incident {
   fingerprint: string | null;
   service_name: string;
   error_type: string;
+  sample_message: string | null;
   severity: string;
   status: string;
   occurrence_count: number;
-  first_occurred_at: string;
-  last_occurred_at: string;
+  first_seen: string;
+  last_seen: string;
 }
 
 function IncidentsList() {
@@ -33,6 +34,7 @@ function IncidentsList() {
             <th>ID</th>
             <th>Fingerprint</th>
             <th>Service</th>
+            <th>Error</th>
             <th>Severity</th>
             <th>Status</th>
             <th>Occurrence Count</th>
@@ -46,11 +48,15 @@ function IncidentsList() {
               <td>{incident.id}</td>
               <td>{incident.fingerprint ?? '-'}</td>
               <td>{incident.service_name}</td>
+              <td>
+                <div>{incident.error_type}</div>
+                <div>{incident.sample_message ?? '-'}</div>
+              </td>
               <td><span className={getSeverityClass(incident.severity)}>{incident.severity}</span></td>
               <td><span className={getStatusClass(incident.status.toLowerCase())}>{incident.status}</span></td>
               <td>{incident.occurrence_count}</td>
-              <td>{new Date(incident.first_occurred_at).toLocaleTimeString()}</td>
-              <td>{new Date(incident.last_occurred_at).toLocaleTimeString()}</td>
+              <td>{new Date(incident.first_seen).toLocaleTimeString()}</td>
+              <td>{new Date(incident.last_seen).toLocaleTimeString()}</td>
             </tr>
           ))}
         </tbody>

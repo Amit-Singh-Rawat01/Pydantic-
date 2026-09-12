@@ -194,10 +194,17 @@ def get_stats(db: Session = Depends(get_db)):
         .count()
     )
 
-    active_incidents = db.query(Incident).count()
+    active_incidents = (
+        db.query(Incident)
+        .filter(Incident.status == "ACTIVE")
+        .count()
+    )
     has_critical = (
         db.query(Incident)
-        .filter(Incident.severity == "CRITICAL")
+        .filter(
+            Incident.status == "ACTIVE",
+            Incident.severity == "CRITICAL",
+        )
         .first()
         is not None
     )
@@ -341,7 +348,7 @@ def get_legacy_error_groups(
 ):
     return get_error_groups(db)
 
-@app.get("/incidents")
+@app.get("/incidents", response_model=list[schemas.IncidentResponse])
 def get_incidents(
     status: str = None,
     db: Session = Depends(get_db)
@@ -354,7 +361,7 @@ def get_incidents(
         )
 
     return query.order_by(
-        Incident.last_occurred_at.desc()
+        Incident.last_seen.desc()
     ).all()
 
 

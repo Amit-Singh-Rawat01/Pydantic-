@@ -20,12 +20,13 @@ class Incident(Base):
     __tablename__ = "incidents"
 
     id = Column(Integer, primary_key=True, index=True)
-    fingerprint = Column(String, index=True, nullable=True)
+    fingerprint = Column(String, index=True, nullable=False)
     service_name = Column(String, nullable=False)
     error_type = Column(String, nullable=False)
+    sample_message = Column(Text, nullable=True)
     severity = Column(String, nullable=False)
-    status = Column(String, default="OPEN")
     occurrence_count = Column(Integer, default=1)
-    first_occurred_at = Column(DateTime, default=func.now())
-    last_occurred_at = Column(DateTime, default=func.now())
-    created_at = Column(DateTime, default=func.now())
+    first_seen = Column(DateTime, default=datetime.utcnow)
+    last_seen = Column(DateTime, default=datetime.utcnow)
+    status = Column(String, default="ACTIVE")
+    created_at = Column(DateTime, default=datetime.utcnow)

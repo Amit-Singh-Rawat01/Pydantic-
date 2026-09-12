@@ -1,65 +1,54 @@
 from datetime import datetime, timedelta
 
-from sqlalchemy import func
-
 from models import Error, Incident
 
 ERROR_THRESHOLD = 5
 TIME_WINDOW_MINUTES = 5
 
-def check_and_create_incident(
-    db,
-    service_name: str,
-    error_type: str,
-    severity: str
-):
-    window_start = datetime.utcnow() - timedelta(
-        minutes=TIME_WINDOW_MINUTES
-    )
-
-    fingerprint_groups = (
-        db.query(
-            Error.fingerprint,
-            func.count(Error.id).label("error_count"),
-        )
+def check_and_create_incident(db, service_name=None, error_type=None, severity=None):
+    window_start = datetime.utcnow() - timedelta(minutes=TIME_WINDOW_MINUTES)
+    recent_errors = (
+        db.query(Error)
         .filter(
             Error.fingerprint.isnot(None),
             Error.occurred_at >= window_start,
         )
-        .group_by(Error.fingerprint)
-        .having(func.count(Error.id) >= ERROR_THRESHOLD)
+        .order_by(Error.occurred_at)
         .all()
     )
 
-    now = datetime.utcnow()
-    for fingerprint, count in fingerprint_groups:
-        latest_error = (
-            db.query(Error)
+    groups = {}
+    for error in recent_errors:
+        groups.setdefault(error.fingerprint, []).append(error)
+
+    for fingerprint, errors in groups.items():
+        if len(errors) < ERROR_THRESHOLD:
+            continue
+
+        latest = errors[-1]
+        existing = (
+            db.query(Incident)
             .filter(
-                Error.fingerprint == fingerprint,
-                Error.occurred_at >= window_start,
+                Incident.fingerprint == fingerprint,
+                Incident.status == "ACTIVE",
             )
-            .order_by(Error.occurred_at.desc())
             .first()
         )
 
-        existing = db.query(Incident).filter(
-            Incident.fingerprint == fingerprint,
-            Incident.status == "OPEN",
-        ).first()
-
         if existing:
-            existing.occurrence_count = count
-            existing.last_occurred_at = now
-        elif latest_error:
+            existing.occurrence_count = len(errors)
+            existing.last_seen = latest.occurred_at
+        else:
             db.add(Incident(
                 fingerprint=fingerprint,
-                service_name=latest_error.service_name,
-                error_type=latest_error.error_type,
-                severity=latest_error.severity,
-                occurrence_count=count,
-                first_occurred_at=window_start,
-                last_occurred_at=now,
+                service_name=latest.service_name,
+                error_type=latest.error_type,
+                sample_message=latest.message,
+                severity=latest.severity,
+                occurrence_count=len(errors),
+                first_seen=errors[0].occurred_at,
+                last_seen=latest.occurred_at,
+                status="ACTIVE",
             ))
 
     db.commit()
