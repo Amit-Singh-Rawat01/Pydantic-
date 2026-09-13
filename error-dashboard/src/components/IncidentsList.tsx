@@ -26,41 +26,63 @@ function IncidentsList() {
   if (error) return <div>{error}</div>;
 
   return (
-    <div>
-      <h2>Incidents</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Fingerprint</th>
-            <th>Service</th>
-            <th>Error</th>
-            <th>Severity</th>
-            <th>Status</th>
-            <th>Occurrence Count</th>
-            <th>First Seen</th>
-            <th>Last Seen</th>
-          </tr>
-        </thead>
-        <tbody>
-          {incidents.map((incident) => (
-            <tr key={incident.id}>
-              <td>{incident.id}</td>
-              <td>{incident.fingerprint ?? '-'}</td>
-              <td>{incident.service_name}</td>
-              <td>
-                <div>{incident.error_type}</div>
-                <div>{incident.sample_message ?? '-'}</div>
-              </td>
-              <td><span className={getSeverityClass(incident.severity)}>{incident.severity}</span></td>
-              <td><span className={getStatusClass(incident.status.toLowerCase())}>{incident.status}</span></td>
-              <td>{incident.occurrence_count}</td>
-              <td>{new Date(incident.first_seen).toLocaleTimeString()}</td>
-              <td>{new Date(incident.last_seen).toLocaleTimeString()}</td>
+    <div className="p-6">
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold">Incidents</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Grouped problems by service, error type, and occurrence count
+          </p>
+        </div>
+        <span className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-600">
+          {incidents.length} active records
+        </span>
+      </div>
+
+      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+        <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
+          <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+            <tr className="border-b border-gray-200">
+              <th className="p-3">Service</th>
+              <th className="p-3">Error</th>
+              <th className="p-3">Severity</th>
+              <th className="p-3">Status</th>
+              <th className="p-3">Occurrences</th>
+              <th className="p-3">First Seen</th>
+              <th className="p-3">Last Seen</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {incidents.map((incident) => (
+              <tr key={incident.id} className="border-b border-gray-100 last:border-b-0">
+                <td className="p-3 font-semibold text-gray-900">{incident.service_name}</td>
+                <td className="max-w-[360px] p-3">
+                  <div className="font-medium text-gray-900">{incident.error_type}</div>
+                  <div
+                    className="truncate text-xs text-gray-500"
+                    title={incident.sample_message ?? 'No sample message'}
+                  >
+                    {incident.sample_message ?? '-'}
+                  </div>
+                </td>
+                <td className="p-3">
+                  <span className={getSeverityClass(incident.severity)}>{incident.severity}</span>
+                </td>
+                <td className="p-3">
+                  <span className={getStatusClass(incident.status.toLowerCase())}>{incident.status}</span>
+                </td>
+                <td className="p-3 font-semibold text-gray-900">{incident.occurrence_count}</td>
+                <td className="whitespace-nowrap p-3 text-xs text-gray-500">
+                  {new Date(incident.first_seen).toLocaleString()}
+                </td>
+                <td className="whitespace-nowrap p-3 text-xs text-gray-500">
+                  {new Date(incident.last_seen).toLocaleString()}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
