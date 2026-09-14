@@ -28,5 +28,5 @@ class Incident(Base):
     occurrence_count = Column(Integer, default=1)
     first_seen = Column(DateTime, default=datetime.utcnow)
     last_seen = Column(DateTime, default=datetime.utcnow)
-    status = Column(String, default="ACTIVE")
+    status = Column(String, default="OPEN", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

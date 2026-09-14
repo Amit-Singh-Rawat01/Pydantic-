@@ -7,6 +7,7 @@ from database import (
     engine,
     ensure_error_fingerprint_column,
     ensure_incident_fingerprint_column,
+    ensure_incident_status_column,
     get_db,
 )
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -21,6 +22,7 @@ from producer import send_error_to_kafka
 
 from fastapi.middleware.cors import CORSMiddleware
 from models import Error, Incident
+from incident_detector import resolve_stale_incidents
 
 
 
@@ -28,6 +30,7 @@ from models import Error, Incident
 Base.metadata.create_all(bind=engine)
 ensure_error_fingerprint_column()
 ensure_incident_fingerprint_column()
+ensure_incident_status_column()
 
 
 app = FastAPI(title="Error Intelligence Platform")
@@ -185,6 +188,7 @@ def get_error_stats(
 
 @app.get("/stats")
 def get_stats(db: Session = Depends(get_db)):
+    resolve_stale_incidents(db)
     total_errors = db.query(models.Error).count()
 
     one_minute_ago = datetime.utcnow() - timedelta(minutes=1)
@@ -196,13 +200,13 @@ def get_stats(db: Session = Depends(get_db)):
 
     active_incidents = (
         db.query(Incident)
-        .filter(Incident.status == "ACTIVE")
+        .filter(Incident.status == "OPEN")
         .count()
     )
     has_critical = (
         db.query(Incident)
         .filter(
-            Incident.status == "ACTIVE",
+            Incident.status == "OPEN",
             Incident.severity == "CRITICAL",
         )
         .first()
@@ -353,6 +357,7 @@ def get_incidents(
     status: str = None,
     db: Session = Depends(get_db)
 ):
+    resolve_stale_incidents(db)
     query = db.query(Incident)
 
     if status:

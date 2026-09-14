@@ -63,6 +63,22 @@ def ensure_incident_fingerprint_column():
         )
 
 
+def ensure_incident_status_column():
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE incidents "
+                "ADD COLUMN IF NOT EXISTS status VARCHAR"
+            )
+        )
+        connection.execute(
+            text(
+                "UPDATE incidents SET status = 'OPEN' "
+                "WHERE status IS NULL OR status = 'ACTIVE'"
+            )
+        )
+
+
 def get_db():
     db = SessionLocal()
     try:

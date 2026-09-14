@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from models import Error, Incident
+from sqlalchemy.orm import Session
 
 ERROR_THRESHOLD = 5
 TIME_WINDOW_MINUTES = 5
@@ -30,7 +31,6 @@ def check_and_create_incident(db, service_name=None, error_type=None, severity=N
             db.query(Incident)
             .filter(
                 Incident.fingerprint == fingerprint,
-                Incident.status == "ACTIVE",
             )
             .first()
         )
@@ -38,6 +38,7 @@ def check_and_create_incident(db, service_name=None, error_type=None, severity=N
         if existing:
             existing.occurrence_count = len(errors)
             existing.last_seen = latest.occurred_at
+            existing.status = "OPEN"
         else:
             db.add(Incident(
                 fingerprint=fingerprint,
@@ -48,7 +49,25 @@ def check_and_create_incident(db, service_name=None, error_type=None, severity=N
                 occurrence_count=len(errors),
                 first_seen=errors[0].occurred_at,
                 last_seen=latest.occurred_at,
-                status="ACTIVE",
+                status="OPEN",
             ))
 
     db.commit()
+
+
+def resolve_stale_incidents(db: Session):
+    cutoff = datetime.utcnow() - timedelta(minutes=5)
+    stale_incidents = (
+        db.query(Incident)
+        .filter(
+            Incident.status == "OPEN",
+            Incident.last_seen < cutoff,
+        )
+        .all()
+    )
+
+    for incident in stale_incidents:
+        incident.status = "RESOLVED"
+
+    if stale_incidents:
+        db.commit()
