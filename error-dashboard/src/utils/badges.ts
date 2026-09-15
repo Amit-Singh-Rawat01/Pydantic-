@@ -9,6 +9,6 @@ export function getSeverityClass(severity: string) {
 
 export function getStatusClass(status: string) {
   return status === 'open'
-    ? 'bg-green-100 text-green-700 px-2 py-1 rounded'
-    : 'bg-red-100 text-red-700 px-2 py-1 rounded';
+    ? 'bg-red-100 text-red-700 px-2 py-1 rounded'
+    : 'bg-green-100 text-green-700 px-2 py-1 rounded';
 }

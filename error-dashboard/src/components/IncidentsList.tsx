@@ -8,7 +8,7 @@ interface Incident {
   error_type: string;
   sample_message: string | null;
   severity: string;
-  status: string;
+  status: 'OPEN' | 'RESOLVED';
   occurrence_count: number;
   first_seen: string;
   last_seen: string;
@@ -21,6 +21,10 @@ function IncidentsList() {
   );
 
   const incidents: Incident[] = Array.isArray(data) ? data : data?.items ?? [];
+  const sortedIncidents = [...incidents].sort((a, b) => {
+    if (a.status === b.status) return 0;
+    return a.status === 'OPEN' ? -1 : 1;
+  });
 
   if (loading) return <div>Loading...</div>;
   if (error) return <div>{error}</div>;
@@ -53,7 +57,7 @@ function IncidentsList() {
             </tr>
           </thead>
           <tbody>
-            {incidents.map((incident) => (
+            {sortedIncidents.map((incident) => (
               <tr key={incident.id} className="border-b border-gray-100 last:border-b-0">
                 <td className="p-3 font-semibold text-gray-900">{incident.service_name}</td>
                 <td className="max-w-[360px] p-3">
