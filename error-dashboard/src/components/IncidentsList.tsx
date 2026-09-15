@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import useAutoRefresh from '../hooks/useAutoRefresh';
 import { getSeverityClass, getStatusClass } from '../utils/badges';
 
@@ -14,14 +15,21 @@ interface Incident {
   last_seen: string;
 }
 
+type StatusFilter = 'ALL' | 'OPEN' | 'RESOLVED';
+
 function IncidentsList() {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const { data, loading, error } = useAutoRefresh<{ items: Incident[] } | Incident[]>(
     () => fetch('http://localhost:8000/incidents').then(res => res.json()),
     5000
   );
 
   const incidents: Incident[] = Array.isArray(data) ? data : data?.items ?? [];
-  const sortedIncidents = [...incidents].sort((a, b) => {
+  const filteredIncidents = incidents.filter((incident) => {
+    if (statusFilter === 'ALL') return true;
+    return incident.status === statusFilter;
+  });
+  const sortedIncidents = [...filteredIncidents].sort((a, b) => {
     if (a.status === b.status) return 0;
     return a.status === 'OPEN' ? -1 : 1;
   });
@@ -42,6 +50,26 @@ function IncidentsList() {
           {incidents.length} incident records
         </span>
       </div>
+
+      <div className="mb-2 flex flex-wrap gap-2">
+        {(['ALL', 'OPEN', 'RESOLVED'] as const).map((status) => (
+          <button
+            key={status}
+            type="button"
+            onClick={() => setStatusFilter(status)}
+            className={`rounded-lg px-4 py-2 text-sm font-medium ${
+              statusFilter === status
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {status}
+          </button>
+        ))}
+      </div>
+      <p className="mb-4 text-sm text-gray-500">
+        Showing {filteredIncidents.length} of {incidents.length} incidents
+      </p>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
         <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
