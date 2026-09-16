@@ -10,7 +10,9 @@ function useAutoRefresh<T>(
 
   const fetchFnRef = useRef(fetchFn);
 
-  fetchFnRef.current = fetchFn;
+  useEffect(() => {
+    fetchFnRef.current = fetchFn;
+  }, [fetchFn]);
 
   useEffect(() => {
     let isMounted = true;
@@ -25,7 +27,7 @@ function useAutoRefresh<T>(
         }
       } catch {
         if (isMounted) {
-          setError('Data fetch nahi ho paaya');
+          setError('Unable to load data. Please check if the backend is running.');
         }
       } finally {
         if (isMounted) {

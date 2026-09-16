@@ -20,7 +20,13 @@ type StatusFilter = 'ALL' | 'OPEN' | 'RESOLVED';
 function IncidentsList() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const { data, loading, error } = useAutoRefresh<{ items: Incident[] } | Incident[]>(
-    () => fetch('http://localhost:8000/incidents').then(res => res.json()),
+    async () => {
+      const response = await fetch('http://localhost:8000/incidents');
+      if (!response.ok) {
+        throw new Error(`Incidents request failed with status ${response.status}`);
+      }
+      return response.json();
+    },
     5000
   );
 
@@ -34,8 +40,13 @@ function IncidentsList() {
     return a.status === 'OPEN' ? -1 : 1;
   });
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div>{error}</div>;
+  if (loading) {
+    return <p className="py-6 text-center text-gray-500">Loading incidents...</p>;
+  }
+
+  if (error) {
+    return <p className="py-6 text-center text-red-500">{error}</p>;
+  }
 
   return (
     <div className="p-6">
@@ -71,50 +82,54 @@ function IncidentsList() {
         Showing {filteredIncidents.length} of {incidents.length} incidents
       </p>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
-          <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-            <tr className="border-b border-gray-200">
-              <th className="p-3">Service</th>
-              <th className="p-3">Error</th>
-              <th className="p-3">Severity</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Occurrences</th>
-              <th className="p-3">First Seen</th>
-              <th className="p-3">Last Seen</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedIncidents.map((incident) => (
-              <tr key={incident.id} className="border-b border-gray-100 last:border-b-0">
-                <td className="p-3 font-semibold text-gray-900">{incident.service_name}</td>
-                <td className="max-w-[360px] p-3">
-                  <div className="font-medium text-gray-900">{incident.error_type}</div>
-                  <div
-                    className="truncate text-xs text-gray-500"
-                    title={incident.sample_message ?? 'No sample message'}
-                  >
-                    {incident.sample_message ?? '-'}
-                  </div>
-                </td>
-                <td className="p-3">
-                  <span className={getSeverityClass(incident.severity)}>{incident.severity}</span>
-                </td>
-                <td className="p-3">
-                  <span className={getStatusClass(incident.status.toLowerCase())}>{incident.status}</span>
-                </td>
-                <td className="p-3 font-semibold text-gray-900">{incident.occurrence_count}</td>
-                <td className="whitespace-nowrap p-3 text-xs text-gray-500">
-                  {new Date(incident.first_seen).toLocaleString()}
-                </td>
-                <td className="whitespace-nowrap p-3 text-xs text-gray-500">
-                  {new Date(incident.last_seen).toLocaleString()}
-                </td>
+      {filteredIncidents.length === 0 ? (
+        <p className="py-6 text-center text-gray-400">No incidents match this filter.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+          <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
+            <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+              <tr className="border-b border-gray-200">
+                <th className="p-3">Service</th>
+                <th className="p-3">Error</th>
+                <th className="p-3">Severity</th>
+                <th className="p-3">Status</th>
+                <th className="p-3">Occurrences</th>
+                <th className="p-3">First Seen</th>
+                <th className="p-3">Last Seen</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {sortedIncidents.map((incident) => (
+                <tr key={incident.id} className="border-b border-gray-100 last:border-b-0">
+                  <td className="p-3 font-semibold text-gray-900">{incident.service_name}</td>
+                  <td className="max-w-[360px] p-3">
+                    <div className="font-medium text-gray-900">{incident.error_type}</div>
+                    <div
+                      className="truncate text-xs text-gray-500"
+                      title={incident.sample_message ?? 'No sample message'}
+                    >
+                      {incident.sample_message ?? '-'}
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <span className={getSeverityClass(incident.severity)}>{incident.severity}</span>
+                  </td>
+                  <td className="p-3">
+                    <span className={getStatusClass(incident.status.toLowerCase())}>{incident.status}</span>
+                  </td>
+                  <td className="p-3 font-semibold text-gray-900">{incident.occurrence_count}</td>
+                  <td className="whitespace-nowrap p-3 text-xs text-gray-500">
+                    {new Date(incident.first_seen).toLocaleString()}
+                  </td>
+                  <td className="whitespace-nowrap p-3 text-xs text-gray-500">
+                    {new Date(incident.last_seen).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
