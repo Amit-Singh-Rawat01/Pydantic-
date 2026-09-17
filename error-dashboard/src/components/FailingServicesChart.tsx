@@ -8,6 +8,7 @@ import {
   YAxis,
 } from "recharts";
 import useAutoRefresh from "../hooks/useAutoRefresh";
+import AsyncSection from "./AsyncSection";
 
 interface ServiceStat {
   service_name: string;
@@ -33,17 +34,12 @@ function FailingServicesChart() {
       <h2 className="mb-4 text-lg font-semibold text-slate-800">
         Failing Services (Last 15 min)
       </h2>
-      {loading && serviceStats.length === 0 ? (
-        <p className="h-62.5 content-center text-sm text-slate-500">
-          Loading service stats...
-        </p>
-      ) : error && serviceStats.length === 0 ? (
-        <p className="h-62.5 content-center text-sm text-red-600">{error}</p>
-      ) : serviceStats.length === 0 ? (
-        <p className="h-62.5 content-center text-sm text-slate-500">
-          No errors in the last 15 minutes.
-        </p>
-      ) : (
+      <AsyncSection
+        loading={loading}
+        error={error}
+        isEmpty={serviceStats.length === 0}
+        emptyMessage="No errors found in the last 15 minutes."
+      >
         <ResponsiveContainer width="100%" height={250}>
           <BarChart
             data={serviceStats}
@@ -56,7 +52,7 @@ function FailingServicesChart() {
             <Bar dataKey="count" fill="#ef4444" />
           </BarChart>
         </ResponsiveContainer>
-      )}
+      </AsyncSection>
     </section>
   );
 }

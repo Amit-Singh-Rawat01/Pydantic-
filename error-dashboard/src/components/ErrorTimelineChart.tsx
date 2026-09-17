@@ -8,6 +8,7 @@ import {
   YAxis,
 } from "recharts";
 import useAutoRefresh from "../hooks/useAutoRefresh";
+import AsyncSection from "./AsyncSection";
 
 interface TimelinePoint {
   minute: string;
@@ -37,13 +38,12 @@ function ErrorTimelineChart() {
       <h2 className="mb-4 text-lg font-semibold text-slate-800">
         Error Timeline (Last 15 min)
       </h2>
-      {loading && timeline.length === 0 ? (
-        <p className="h-62.5 content-center text-sm text-slate-500">
-          Loading timeline...
-        </p>
-      ) : error && timeline.length === 0 ? (
-        <p className="h-62.5 content-center text-sm text-red-600">{error}</p>
-      ) : (
+      <AsyncSection
+        loading={loading}
+        error={error}
+        isEmpty={timeline.length === 0}
+        emptyMessage="No data found in the last 15 minutes."
+      >
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={timeline} margin={{ top: 5, right: 12, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -60,7 +60,7 @@ function ErrorTimelineChart() {
             />
           </LineChart>
         </ResponsiveContainer>
-      )}
+      </AsyncSection>
     </section>
   );
 }

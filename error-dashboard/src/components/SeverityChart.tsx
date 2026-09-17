@@ -7,6 +7,7 @@ import {
   Tooltip,
 } from "recharts";
 import useAutoRefresh from "../hooks/useAutoRefresh";
+import AsyncSection from "./AsyncSection";
 
 const SEVERITY_COLORS: Record<string, string> = {
   LOW: "#22c55e",
@@ -35,23 +36,19 @@ const fetchSeverityStats = async (): Promise<SeverityData[]> => {
 function SeverityChart() {
   const { data, loading, error } = useAutoRefresh(fetchSeverityStats, 5000);
   const severityStats = data ?? [];
+  const hasSeverityData = severityStats.some((entry) => entry.count > 0);
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="mb-4 text-lg font-semibold text-slate-800">
         Severity Breakdown (Last 15 min)
       </h2>
-      {loading && severityStats.length === 0 ? (
-        <p className="h-62.5 content-center text-sm text-slate-500">
-          Loading severity stats...
-        </p>
-      ) : error && severityStats.length === 0 ? (
-        <p className="h-62.5 content-center text-sm text-red-600">{error}</p>
-      ) : severityStats.length === 0 ? (
-        <p className="h-62.5 content-center text-sm text-slate-500">
-          No errors in the last 15 minutes.
-        </p>
-      ) : (
+      <AsyncSection
+        loading={loading}
+        error={error}
+        isEmpty={!hasSeverityData}
+        emptyMessage="No errors found in the last 15 minutes."
+      >
         <ResponsiveContainer width="100%" height={250}>
           <PieChart>
             <Pie
@@ -76,7 +73,7 @@ function SeverityChart() {
             <Legend />
           </PieChart>
         </ResponsiveContainer>
-      )}
+      </AsyncSection>
     </section>
   );
 }

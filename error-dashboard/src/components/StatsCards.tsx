@@ -23,8 +23,8 @@ function StatsCards() {
     5000
   );
 
-  if (loading) return <p className="p-6">Loading stats...</p>;
-  if (error) return <p className="p-6 text-red-600">{error}</p>;
+  if (loading) return <p className="p-6 text-sm text-gray-400">Stats loading...</p>;
+  if (error) return <p className="p-6 text-sm text-red-500">⚠ Stats could not be loaded</p>;
   if (!stats) return null;
 
   const healthColor =

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import useAutoRefresh from '../hooks/useAutoRefresh';
 import { getSeverityClass, getStatusClass } from '../utils/badges';
+import AsyncSection from './AsyncSection';
 
 interface Incident {
   id: number;
@@ -40,14 +41,6 @@ function IncidentsList() {
     return a.status === 'OPEN' ? -1 : 1;
   });
 
-  if (loading) {
-    return <p className="py-6 text-center text-gray-500">Loading incidents...</p>;
-  }
-
-  if (error) {
-    return <p className="py-6 text-center text-red-500">{error}</p>;
-  }
-
   return (
     <div className="p-6">
       <div className="mb-4 flex items-center justify-between gap-4">
@@ -82,9 +75,16 @@ function IncidentsList() {
         Showing {filteredIncidents.length} of {incidents.length} incidents
       </p>
 
-      {filteredIncidents.length === 0 ? (
-        <p className="py-6 text-center text-gray-400">No incidents match this filter.</p>
-      ) : (
+      <AsyncSection
+        loading={loading}
+        error={error}
+        isEmpty={filteredIncidents.length === 0}
+        emptyMessage={
+          statusFilter === 'ALL'
+            ? 'No incidents detected yet.'
+            : `No ${statusFilter.toLowerCase()} incidents found.`
+        }
+      >
         <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
           <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
             <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
@@ -129,7 +129,7 @@ function IncidentsList() {
             </tbody>
           </table>
         </div>
-      )}
+      </AsyncSection>
     </div>
   );
 }
