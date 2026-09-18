@@ -1,12 +1,13 @@
 import json
 import os
-from datetime import datetime
 
 from kafka import KafkaConsumer
+from pydantic import ValidationError
 from redis_client import redis_client
 
 from database import SessionLocal
 import models
+from schemas import ErrorEventSchema
 from fingerprint import generate_fingerprint
 
 import time
@@ -35,7 +36,7 @@ KAFKA_BOOTSTRAP_SERVERS = os.getenv(
 consumer = KafkaConsumer(
     "errors-topic",
     bootstrap_servers=[KAFKA_BOOTSTRAP_SERVERS],
-    value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+    value_deserializer=lambda m: m,
     auto_offset_reset="earliest",
     enable_auto_commit=True,
     group_id="error-consumer",
@@ -49,29 +50,29 @@ for message in consumer:
     db = None
 
     try:
-        error_data = message.value
+        error_data = json.loads(message.value.decode("utf-8"))
 
         print(f"Received from Kafka: {error_data}")
 
         if not isinstance(error_data, dict):
-            raise ValueError(
-                "Kafka message is not a valid dictionary"
-            )
+            raise ValueError("Kafka message must contain a JSON object")
+
+        validated_event = ErrorEventSchema(**error_data)
 
         fp = generate_fingerprint(
-            service_name=error_data["service_name"],
-            error_type=error_data["error_type"],
+            service_name=validated_event.service_name,
+            error_type=validated_event.error_type,
         )
 
         db = SessionLocal()
 
         new_error = models.Error(
-            service_name=error_data["service_name"],
-            error_type=error_data["error_type"],
-            message=error_data["message"],
-            severity=error_data["severity"],
-            stack_trace=error_data.get("stack_trace"),
-            occurred_at=error_data.get("occurred_at"),
+            service_name=validated_event.service_name,
+            error_type=validated_event.error_type,
+            message=validated_event.message,
+            severity=validated_event.severity.value,
+            stack_trace=validated_event.stack_trace,
+            occurred_at=validated_event.occurred_at,
             fingerprint=fp,
         )
 
@@ -91,11 +92,19 @@ for message in consumer:
         )
 
         update_realtime_counters(
-        error_data["service_name"]
+        validated_event.service_name
         )
         
 
         print("Redis counters updated.")
+
+    except (
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        ValidationError,
+        ValueError,
+    ) as e:
+        print(f"[REJECTED] Invalid event skipped. Reason: {e}")
 
     except Exception as e:
         if db:
