@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 
 from kafka import KafkaConsumer
@@ -12,6 +13,36 @@ from fingerprint import generate_fingerprint
 
 import time
 from incident_detector import check_and_create_incident
+
+
+MAX_PAYLOAD_LENGTH = 2000
+MAX_REASON_LENGTH = 500
+
+
+def save_rejected_event(raw_payload, reason):
+    if isinstance(raw_payload, bytes):
+        raw_payload = raw_payload.decode("utf-8", errors="replace")
+    elif not isinstance(raw_payload, str):
+        raw_payload = str(raw_payload)
+
+    db = SessionLocal()
+    try:
+        db.add(
+            models.RejectedEvent(
+                raw_payload=raw_payload[:MAX_PAYLOAD_LENGTH],
+                reason=str(reason)[:MAX_REASON_LENGTH],
+            )
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logging.error(
+            "Rejected event DB mein save nahi ho paya: %s | payload: %s",
+            e,
+            raw_payload[:200],
+        )
+    finally:
+        db.close()
 
 
 
@@ -48,9 +79,10 @@ print(
 
 for message in consumer:
     db = None
+    raw_message = message.value
 
     try:
-        error_data = json.loads(message.value.decode("utf-8"))
+        error_data = json.loads(raw_message.decode("utf-8"))
 
         print(f"Received from Kafka: {error_data}")
 
@@ -105,6 +137,7 @@ for message in consumer:
         ValueError,
     ) as e:
         print(f"[REJECTED] Invalid event skipped. Reason: {e}")
+        save_rejected_event(raw_message, f"{type(e).__name__}: {e}")
 
     except Exception as e:
         if db:

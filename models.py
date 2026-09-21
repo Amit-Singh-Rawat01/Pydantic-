@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, Text
 from sqlalchemy.sql import func
 from database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 
 class Error(Base):
     __tablename__ = "errors"
@@ -30,3 +30,15 @@ class Incident(Base):
     last_seen = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default="OPEN", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class RejectedEvent(Base):
+    __tablename__ = "rejected_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    raw_payload = Column(Text, nullable=False)
+    reason = Column(Text, nullable=False)
+    rejected_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )

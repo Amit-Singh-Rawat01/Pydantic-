@@ -21,7 +21,7 @@ import os
 from producer import send_error_to_kafka
 
 from fastapi.middleware.cors import CORSMiddleware
-from models import Error, Incident
+from models import Error, Incident, RejectedEvent
 from incident_detector import resolve_stale_incidents
 
 
@@ -368,6 +368,34 @@ def get_incidents(
     return query.order_by(
         Incident.last_seen.desc()
     ).all()
+
+
+@app.get("/rejected-events")
+def get_rejected_events(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+):
+    limit = min(limit, 200)
+    total = db.query(RejectedEvent).count()
+    events = (
+        db.query(RejectedEvent)
+        .order_by(RejectedEvent.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "total": total,
+        "events": [
+            {
+                "id": event.id,
+                "reason": event.reason,
+                "raw_payload": event.raw_payload,
+                "rejected_at": event.rejected_at,
+            }
+            for event in events
+        ],
+    }
 
 
 @app.get("/incidents/{incident_id}")
