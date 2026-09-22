@@ -5,6 +5,7 @@ import os
 from kafka import KafkaConsumer
 from pydantic import ValidationError
 from redis_client import redis_client
+from sqlalchemy.exc import OperationalError
 
 from database import SessionLocal
 import models
@@ -25,8 +26,9 @@ def save_rejected_event(raw_payload, reason):
     elif not isinstance(raw_payload, str):
         raw_payload = str(raw_payload)
 
-    db = SessionLocal()
+    db = None
     try:
+        db = SessionLocal()
         db.add(
             models.RejectedEvent(
                 raw_payload=raw_payload[:MAX_PAYLOAD_LENGTH],
@@ -34,15 +36,24 @@ def save_rejected_event(raw_payload, reason):
             )
         )
         db.commit()
-    except Exception as e:
-        db.rollback()
+    except OperationalError as e:
         logging.error(
-            "Rejected event DB mein save nahi ho paya: %s | payload: %s",
+            "[DB WRITE FAILED] Database unreachable; rejected event was not saved: %s",
+            e,
+        )
+        if db:
+            db.rollback()
+    except Exception as e:
+        logging.error(
+            "[DB WRITE FAILED] Unexpected error saving rejected event: %s | payload: %s",
             e,
             raw_payload[:200],
         )
+        if db:
+            db.rollback()
     finally:
-        db.close()
+        if db:
+            db.close()
 
 
 
@@ -96,32 +107,47 @@ for message in consumer:
             error_type=validated_event.error_type,
         )
 
-        db = SessionLocal()
+        try:
+            db = SessionLocal()
 
-        new_error = models.Error(
-            service_name=validated_event.service_name,
-            error_type=validated_event.error_type,
-            message=validated_event.message,
-            severity=validated_event.severity.value,
-            stack_trace=validated_event.stack_trace,
-            occurred_at=validated_event.occurred_at,
-            fingerprint=fp,
-        )
+            new_error = models.Error(
+                service_name=validated_event.service_name,
+                error_type=validated_event.error_type,
+                message=validated_event.message,
+                severity=validated_event.severity.value,
+                stack_trace=validated_event.stack_trace,
+                occurred_at=validated_event.occurred_at,
+                fingerprint=fp,
+            )
 
-        db.add(new_error)
-        db.commit()
+            db.add(new_error)
+            db.commit()
 
-        check_and_create_incident(
-        db,
-        new_error.service_name,
-        new_error.error_type,
-        new_error.severity
-)
+            check_and_create_incident(
+                db,
+                new_error.service_name,
+                new_error.error_type,
+                new_error.severity,
+            )
 
-        print(
-            f"Saved to DB successfully. "
-            f"Fingerprint: {fp}"
-        )
+            print(
+                f"Saved to DB successfully. "
+                f"Fingerprint: {fp}"
+            )
+        except OperationalError as e:
+            print(
+                f"[DB WRITE FAILED] Database unreachable — "
+                f"'{validated_event.service_name}' ka event save nahi hua."
+            )
+            if db:
+                db.rollback()
+        except Exception as e:
+            print(
+                f"[DB WRITE FAILED] Unexpected error saving "
+                f"'{validated_event.service_name}': {e}"
+            )
+            if db:
+                db.rollback()
 
         update_realtime_counters(
         validated_event.service_name
