@@ -3,6 +3,7 @@ import logging
 import os
 
 from kafka import KafkaConsumer
+from kafka.errors import KafkaError
 from pydantic import ValidationError
 from redis_client import redis_client
 from sqlalchemy.exc import OperationalError
@@ -75,102 +76,124 @@ KAFKA_BOOTSTRAP_SERVERS = os.getenv(
 )
 
 
-consumer = KafkaConsumer(
-    "errors-topic",
-    bootstrap_servers=[KAFKA_BOOTSTRAP_SERVERS],
-    value_deserializer=lambda m: m,
-    auto_offset_reset="earliest",
-    enable_auto_commit=True,
-    group_id="error-consumer",
-)
+def create_consumer_with_retry():
+    wait = 2
+    while True:
+        try:
+            consumer = KafkaConsumer(
+                "errors-topic",
+                bootstrap_servers=[KAFKA_BOOTSTRAP_SERVERS],
+                bootstrap_timeout_ms=2000,
+                value_deserializer=lambda m: m,
+                auto_offset_reset="earliest",
+                enable_auto_commit=True,
+                group_id="error-consumer",
+            )
+            print("[KAFKA OK] consumer connected")
+            return consumer
+        except KafkaError as error:
+            print(
+                f"[KAFKA WAIT] Kafka unavailable - "
+                f"{type(error).__name__}; retrying in {wait}s"
+            )
+            time.sleep(wait)
+            wait = min(wait * 2, 30)
 
-print(
-    f"Consumer started. Kafka: {KAFKA_BOOTSTRAP_SERVERS}"
-)
 
-for message in consumer:
-    db = None
-    raw_message = message.value
+while True:
+    consumer = create_consumer_with_retry()
+
+    print(
+        f"Consumer started. Kafka: {KAFKA_BOOTSTRAP_SERVERS}"
+    )
 
     try:
-        error_data = json.loads(raw_message.decode("utf-8"))
+        for message in consumer:
+            db = None
+            raw_message = message.value
 
-        print(f"Received from Kafka: {error_data}")
+            try:
+                error_data = json.loads(raw_message.decode("utf-8"))
 
-        if not isinstance(error_data, dict):
-            raise ValueError("Kafka message must contain a JSON object")
+                print(f"Received from Kafka: {error_data}")
 
-        validated_event = ErrorEventSchema(**error_data)
+                if not isinstance(error_data, dict):
+                    raise ValueError("Kafka message must contain a JSON object")
 
-        fp = generate_fingerprint(
-            service_name=validated_event.service_name,
-            error_type=validated_event.error_type,
+                validated_event = ErrorEventSchema(**error_data)
+
+                fp = generate_fingerprint(
+                    service_name=validated_event.service_name,
+                    error_type=validated_event.error_type,
+                )
+
+                try:
+                    db = SessionLocal()
+
+                    new_error = models.Error(
+                        service_name=validated_event.service_name,
+                        error_type=validated_event.error_type,
+                        message=validated_event.message,
+                        severity=validated_event.severity.value,
+                        stack_trace=validated_event.stack_trace,
+                        occurred_at=validated_event.occurred_at,
+                        fingerprint=fp,
+                    )
+
+                    db.add(new_error)
+                    db.commit()
+
+                    check_and_create_incident(
+                        db,
+                        new_error.service_name,
+                        new_error.error_type,
+                        new_error.severity,
+                    )
+
+                    print(
+                        f"Saved to DB successfully. "
+                        f"Fingerprint: {fp}"
+                    )
+                except OperationalError as e:
+                    print(
+                        f"[DB WRITE FAILED] Database unreachable — "
+                        f"'{validated_event.service_name}' ka event save nahi hua."
+                    )
+                    if db:
+                        db.rollback()
+                except Exception as e:
+                    print(
+                        f"[DB WRITE FAILED] Unexpected error saving "
+                        f"'{validated_event.service_name}': {e}"
+                    )
+                    if db:
+                        db.rollback()
+
+                update_realtime_counters(validated_event.service_name)
+
+                print("Redis counters updated.")
+
+            except (
+                UnicodeDecodeError,
+                json.JSONDecodeError,
+                ValidationError,
+                ValueError,
+            ) as e:
+                print(f"[REJECTED] Invalid event skipped. Reason: {e}")
+                save_rejected_event(raw_message, f"{type(e).__name__}: {e}")
+
+            except Exception as e:
+                if db:
+                    db.rollback()
+
+                print(f"Consumer error: {e}")
+
+            finally:
+                if db:
+                    db.close()
+    except KafkaError as error:
+        print(
+            f"[KAFKA RETRY] connection lost - "
+            f"{type(error).__name__}; reconnecting"
         )
-
-        try:
-            db = SessionLocal()
-
-            new_error = models.Error(
-                service_name=validated_event.service_name,
-                error_type=validated_event.error_type,
-                message=validated_event.message,
-                severity=validated_event.severity.value,
-                stack_trace=validated_event.stack_trace,
-                occurred_at=validated_event.occurred_at,
-                fingerprint=fp,
-            )
-
-            db.add(new_error)
-            db.commit()
-
-            check_and_create_incident(
-                db,
-                new_error.service_name,
-                new_error.error_type,
-                new_error.severity,
-            )
-
-            print(
-                f"Saved to DB successfully. "
-                f"Fingerprint: {fp}"
-            )
-        except OperationalError as e:
-            print(
-                f"[DB WRITE FAILED] Database unreachable — "
-                f"'{validated_event.service_name}' ka event save nahi hua."
-            )
-            if db:
-                db.rollback()
-        except Exception as e:
-            print(
-                f"[DB WRITE FAILED] Unexpected error saving "
-                f"'{validated_event.service_name}': {e}"
-            )
-            if db:
-                db.rollback()
-
-        update_realtime_counters(
-        validated_event.service_name
-        )
-        
-
-        print("Redis counters updated.")
-
-    except (
-        UnicodeDecodeError,
-        json.JSONDecodeError,
-        ValidationError,
-        ValueError,
-    ) as e:
-        print(f"[REJECTED] Invalid event skipped. Reason: {e}")
-        save_rejected_event(raw_message, f"{type(e).__name__}: {e}")
-
-    except Exception as e:
-        if db:
-            db.rollback()
-
-        print(f"Consumer error: {e}")
-
-    finally:
-        if db:
-            db.close()
+        consumer.close()

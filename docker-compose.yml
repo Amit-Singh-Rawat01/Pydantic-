@@ -38,7 +38,7 @@ services:
   consumer:
     build: .
     restart: always
-    command: ["python", "consumer.py"]
+    command: ["python", "-u", "consumer.py"]
     depends_on:
       - db
       - kafka

@@ -1,33 +1,8 @@
-import json
 import random
 import sys
 import time
-from kafka import KafkaProducer
 
-
-# -----------------------------------
-# 1. Kafka Producer Factory
-# -----------------------------------
-
-def create_kafka_producer():
-    """
-    Docker ke andar Kafka:
-        kafka:9092
-
-    Windows/host machine par Kafka:
-        localhost:9092
-    """
-
-    # Docker container ke andar /.dockerenv file hoti hai
-    if sys.platform != "win32" and __import__("os").path.exists("/.dockerenv"):
-        bootstrap_server = "kafka:9092"
-    else:
-        bootstrap_server = "localhost:9092"
-
-    return KafkaProducer(
-        bootstrap_servers=[bootstrap_server],
-        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-    )
+from safe_producer import send_event
 
 
 # -----------------------------------
@@ -39,32 +14,13 @@ def send_error_to_kafka(error_data: dict) -> bool:
     FastAPI /errors endpoint is function ko use karega.
     """
 
-    producer = None
-
-    try:
-        producer = create_kafka_producer()
-
-        future = producer.send(
-            "errors-topic",
-            value=error_data,
-        )
-
-        # Kafka acknowledgement ka wait
-        future.get(timeout=10)
-
-        producer.flush()
-
+    status = send_event(error_data)
+    if status == "sent":
         print(f"Sent to Kafka: {error_data}")
+    else:
+        print(f"Kafka unavailable; event buffered: {error_data}")
 
-        return True
-
-    except Exception as e:
-        print(f"Kafka publish failed: {e}")
-        return False
-
-    finally:
-        if producer:
-            producer.close()
+    return True
 
 
 # -----------------------------------
