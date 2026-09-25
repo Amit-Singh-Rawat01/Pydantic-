@@ -37,6 +37,7 @@ def save_rejected_event(raw_payload, reason):
             )
         )
         db.commit()
+        return True
     except OperationalError as e:
         logging.error(
             "[DB WRITE FAILED] Database unreachable; rejected event was not saved: %s",
@@ -55,6 +56,8 @@ def save_rejected_event(raw_payload, reason):
     finally:
         if db:
             db.close()
+
+    return False
 
 
 
@@ -86,7 +89,7 @@ def create_consumer_with_retry():
                 bootstrap_timeout_ms=2000,
                 value_deserializer=lambda m: m,
                 auto_offset_reset="earliest",
-                enable_auto_commit=True,
+                enable_auto_commit=False,
                 group_id="error-consumer",
             )
             print("[KAFKA OK] consumer connected")
@@ -161,6 +164,7 @@ while True:
                     )
                     if db:
                         db.rollback()
+                    raise
                 except Exception as e:
                     print(
                         f"[DB WRITE FAILED] Unexpected error saving "
@@ -168,10 +172,13 @@ while True:
                     )
                     if db:
                         db.rollback()
+                    raise
 
                 update_realtime_counters(validated_event.service_name)
 
                 print("Redis counters updated.")
+                consumer.commit()
+                print("Kafka offset committed after successful processing.")
 
             except (
                 UnicodeDecodeError,
@@ -180,13 +187,23 @@ while True:
                 ValueError,
             ) as e:
                 print(f"[REJECTED] Invalid event skipped. Reason: {e}")
-                save_rejected_event(raw_message, f"{type(e).__name__}: {e}")
+                rejected_saved = save_rejected_event(
+                    raw_message,
+                    f"{type(e).__name__}: {e}",
+                )
+                if not rejected_saved:
+                    raise RuntimeError(
+                        "Rejected event could not be persisted; offset not committed"
+                    )
+                consumer.commit()
+                print("Kafka offset committed after rejected event was saved.")
 
             except Exception as e:
                 if db:
                     db.rollback()
 
                 print(f"Consumer error: {e}")
+                raise
 
             finally:
                 if db:
