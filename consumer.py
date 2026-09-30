@@ -6,6 +6,7 @@ from kafka import KafkaConsumer
 from kafka.errors import KafkaError
 from pydantic import ValidationError
 from redis_client import redis_client
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import OperationalError
 
 from database import SessionLocal
@@ -133,7 +134,7 @@ while True:
                 try:
                     db = SessionLocal()
 
-                    new_error = models.Error(
+                    stmt = pg_insert(models.Error).values(
                         service_name=validated_event.service_name,
                         error_type=validated_event.error_type,
                         message=validated_event.message,
@@ -141,22 +142,37 @@ while True:
                         stack_trace=validated_event.stack_trace,
                         occurred_at=validated_event.occurred_at,
                         fingerprint=fp,
+                        kafka_partition=message.partition,
+                        kafka_offset=message.offset,
+                    )
+                    stmt = stmt.on_conflict_do_nothing(
+                        index_elements=[
+                            "kafka_partition",
+                            "kafka_offset",
+                        ]
                     )
 
-                    db.add(new_error)
+                    insert_result = db.execute(stmt)
+
+                    if insert_result.rowcount:
+                        check_and_create_incident(
+                            db,
+                            validated_event.service_name,
+                            validated_event.error_type,
+                            validated_event.severity.value,
+                        )
+
+                        print(
+                            f"Saved to DB successfully. "
+                            f"Fingerprint: {fp}"
+                        )
+                    else:
+                        print(
+                            "Duplicate Kafka message ignored: "
+                            f"partition={message.partition}, "
+                            f"offset={message.offset}"
+                        )
                     db.commit()
-
-                    check_and_create_incident(
-                        db,
-                        new_error.service_name,
-                        new_error.error_type,
-                        new_error.severity,
-                    )
-
-                    print(
-                        f"Saved to DB successfully. "
-                        f"Fingerprint: {fp}"
-                    )
                 except OperationalError as e:
                     print(
                         f"[DB WRITE FAILED] Database unreachable — "
@@ -174,9 +190,10 @@ while True:
                         db.rollback()
                     raise
 
-                update_realtime_counters(validated_event.service_name)
+                if insert_result.rowcount:
+                    update_realtime_counters(validated_event.service_name)
 
-                print("Redis counters updated.")
+                    print("Redis counters updated.")
                 consumer.commit()
                 print("Kafka offset committed after successful processing.")
 

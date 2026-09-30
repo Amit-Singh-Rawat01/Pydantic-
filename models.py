@@ -1,10 +1,25 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text
+from sqlalchemy import (
+    BigInteger,
+    Column,
+    DateTime,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.sql import func
 from database import Base
 from datetime import datetime, timezone
 
 class Error(Base):
     __tablename__ = "errors"
+    __table_args__ = (
+        UniqueConstraint(
+            "kafka_partition",
+            "kafka_offset",
+            name="uq_kafka_partition_offset",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     service_name = Column(String, nullable=False)
@@ -14,6 +29,8 @@ class Error(Base):
     stack_trace = Column(Text, nullable=True)
     occurred_at = Column(DateTime, default=func.now())
     fingerprint = Column(String, index=True)  
+    kafka_partition = Column(Integer, nullable=True)
+    kafka_offset = Column(BigInteger, nullable=True)
 
 
 class Incident(Base):
