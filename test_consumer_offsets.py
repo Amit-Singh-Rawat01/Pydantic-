@@ -72,6 +72,30 @@ class ConsumerOffsetTests(unittest.TestCase):
         self.assertIn("check_and_create_incident", guarded_calls)
         self.assertIn("update_realtime_counters", guarded_calls)
 
+    def test_crash_hook_runs_after_database_commit_before_offset_commit(self):
+        self.assertIn(
+            "CRASH_AFTER = int(sys.argv[1]) if len(sys.argv) > 1 else 0",
+            self.source,
+        )
+        insert_position = self.source.index("insert_result = db.execute(stmt)")
+        crash_position = self.source.index("os._exit(1)")
+        database_commit_position = self.source.index(
+            "db.commit()", insert_position
+        )
+        offset_commit_position = self.source.index(
+            "consumer.commit()", crash_position
+        )
+
+        self.assertLess(insert_position, crash_position)
+        self.assertLess(database_commit_position, crash_position)
+        self.assertLess(crash_position, offset_commit_position)
+        self.assertLess(
+            self.source.index("update_realtime_counters(validated_event.service_name)"),
+            crash_position,
+        )
+        self.assertIn("saved_this_run == CRASH_AFTER", self.source)
+        self.assertIn('"[SKIP] pehle se delivered;', self.source)
+
 
 if __name__ == "__main__":
     unittest.main()

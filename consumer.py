@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import sys
 
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
@@ -20,6 +21,7 @@ from incident_detector import check_and_create_incident
 
 MAX_PAYLOAD_LENGTH = 2000
 MAX_REASON_LENGTH = 500
+CRASH_AFTER = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
 
 def save_rejected_event(raw_payload, reason):
@@ -112,6 +114,7 @@ while True:
     )
 
     try:
+        saved_this_run = 0
         for message in consumer:
             db = None
             raw_message = message.value
@@ -168,10 +171,11 @@ while True:
                         )
                     else:
                         print(
-                            "Duplicate Kafka message ignored: "
+                            "[SKIP] pehle se delivered; duplicate Kafka message ignored: "
                             f"partition={message.partition}, "
                             f"offset={message.offset}"
                         )
+
                     db.commit()
                 except OperationalError as e:
                     print(
@@ -194,6 +198,15 @@ while True:
                     update_realtime_counters(validated_event.service_name)
 
                     print("Redis counters updated.")
+
+                    saved_this_run += 1
+                    if CRASH_AFTER and saved_this_run == CRASH_AFTER:
+                        print(
+                            f"[CRASH] event #{saved_this_run} save hua, commit nahi hua",
+                            flush=True,
+                        )
+                        os._exit(1)
+
                 consumer.commit()
                 print("Kafka offset committed after successful processing.")
 
