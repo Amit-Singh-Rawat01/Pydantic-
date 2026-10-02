@@ -1,0 +1,3 @@
+Normal mode mein har service shuru hote hi ek event bhejti hai, phir har 0.5 second mein 0.5% chance par chhota error bhejti hai.
+Failure mode mein wahi service har 0.5 second mein apna ek hi CRITICAL error bhejti hai, jisse spike aur stable fingerprint banta hai.
+`toggle_failure.py` flag file bana ya mita kar mode badalta hai; chalti service file ko har tick par dekhti hai, isliye restart ki zaroorat nahi hoti.
