@@ -23,6 +23,7 @@ from producer import send_error_to_kafka
 from fastapi.middleware.cors import CORSMiddleware
 from models import Error, Incident, RejectedEvent
 from incident_detector import resolve_stale_incidents
+from baseline import calculate_baseline
 
 
 
@@ -296,6 +297,14 @@ def get_error_timeline(db: Session = Depends(get_db)):
     }
 
 
+@app.get("/metrics/baseline")
+def get_baseline(
+    lookback_minutes: int = Query(default=30, ge=1),
+    db: Session = Depends(get_db),
+):
+    return calculate_baseline(db, lookback_minutes)
+
+
 # Day 26: Group errors by fingerprint
 @app.get("/error-groups")
 def get_error_groups(
@@ -414,5 +423,4 @@ def get_incident(
         )
 
     return incident
-
 
