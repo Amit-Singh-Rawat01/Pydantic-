@@ -1,8 +1,13 @@
 from datetime import datetime, timedelta
-from statistics import mean, pstdev
+from statistics import mean, pstdev, stdev
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+
+BASELINE_MINUTES = 30
+MIN_BASELINE_MINUTES = 5
+Z_THRESHOLD = 3
 
 
 def calculate_baseline(
@@ -48,3 +53,81 @@ def calculate_baseline(
         "lookback_minutes": lookback_minutes,
         "services": services,
     }
+
+
+def calculate_anomaly_scores(db: Session):
+    now_minute = datetime.utcnow().replace(second=0, microsecond=0)
+    current_minute = now_minute - timedelta(minutes=1)
+    baseline_start = now_minute - timedelta(minutes=BASELINE_MINUTES + 1)
+
+    rows = db.execute(
+        text(
+            """
+            SELECT service_name,
+                   date_trunc('minute', occurred_at) AS error_minute,
+                   COUNT(*) AS error_count
+            FROM errors
+            WHERE occurred_at >= :baseline_start
+              AND occurred_at < :window_end
+            GROUP BY service_name, error_minute
+            """
+        ),
+        {"baseline_start": baseline_start, "window_end": now_minute},
+    ).fetchall()
+
+    counts_by_service = {}
+    for service_name, error_minute, error_count in rows:
+        counts_by_service.setdefault(service_name, {})[error_minute] = error_count
+
+    results = []
+    for service_name, minute_counts in sorted(counts_by_service.items()):
+        history = [
+            minute_counts.get(
+                baseline_start + timedelta(minutes=offset),
+                0,
+            )
+            for offset in range(BASELINE_MINUTES)
+        ]
+        observed_history_minutes = [
+            minute for minute in minute_counts if minute < current_minute
+        ]
+        available_minutes = (
+            min(
+                BASELINE_MINUTES,
+                int(
+                    (current_minute - min(observed_history_minutes)).total_seconds()
+                    // 60
+                ),
+            )
+            if observed_history_minutes
+            else 0
+        )
+        current_count = minute_counts.get(current_minute, 0)
+
+        if available_minutes < MIN_BASELINE_MINUTES:
+            results.append(
+                {
+                    "service": service_name,
+                    "current": current_count,
+                    "status": "NOT_ENOUGH_DATA",
+                }
+            )
+            continue
+
+        baseline_counts = history[-available_minutes:]
+        average = mean(baseline_counts)
+        std_dev = stdev(baseline_counts)
+        z_score = (current_count - average) / max(std_dev, 1)
+
+        results.append(
+            {
+                "service": service_name,
+                "current": current_count,
+                "mean": round(average, 2),
+                "std_dev": round(std_dev, 2),
+                "z_score": round(z_score, 2),
+                "status": "ANOMALY" if z_score > Z_THRESHOLD else "NORMAL",
+            }
+        )
+
+    return results
