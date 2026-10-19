@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
-from baseline import calculate_anomaly_scores
+from baseline import calculate_anomaly_scores, classify_z_score
 
 
 class FakeResult:
@@ -26,6 +26,13 @@ class FakeDatabase:
 
 
 class AnomalyScoreTests(unittest.TestCase):
+    def test_classifies_z_score_thresholds(self):
+        self.assertEqual(classify_z_score(None), "NO_DATA")
+        self.assertEqual(classify_z_score(1.99), "NORMAL")
+        self.assertEqual(classify_z_score(2.0), "WARNING")
+        self.assertEqual(classify_z_score(2.99), "WARNING")
+        self.assertEqual(classify_z_score(3.0), "ANOMALY")
+
     @patch("baseline.datetime")
     def test_detects_spike_and_includes_quiet_baseline_minutes(
         self, mocked_datetime
@@ -78,7 +85,14 @@ class AnomalyScoreTests(unittest.TestCase):
 
         self.assertEqual(
             result,
-            [{"service": "auth", "current": 10, "status": "NOT_ENOUGH_DATA"}],
+            [
+                {
+                    "service": "auth",
+                    "current": 10,
+                    "z_score": None,
+                    "status": "NO_DATA",
+                }
+            ],
         )
 
     def test_empty_window_returns_no_services(self):

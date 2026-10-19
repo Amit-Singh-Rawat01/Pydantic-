@@ -7,7 +7,18 @@ from sqlalchemy.orm import Session
 
 BASELINE_MINUTES = 30
 MIN_BASELINE_MINUTES = 5
-Z_THRESHOLD = 3
+WARNING_Z = 2.0
+ANOMALY_Z = 3.0
+
+
+def classify_z_score(z_score):
+    if z_score is None:
+        return "NO_DATA"
+    if z_score >= ANOMALY_Z:
+        return "ANOMALY"
+    if z_score >= WARNING_Z:
+        return "WARNING"
+    return "NORMAL"
 
 
 def calculate_baseline(
@@ -109,7 +120,8 @@ def calculate_anomaly_scores(db: Session):
                 {
                     "service": service_name,
                     "current": current_count,
-                    "status": "NOT_ENOUGH_DATA",
+                    "z_score": None,
+                    "status": classify_z_score(None),
                 }
             )
             continue
@@ -126,7 +138,7 @@ def calculate_anomaly_scores(db: Session):
                 "mean": round(average, 2),
                 "std_dev": round(std_dev, 2),
                 "z_score": round(z_score, 2),
-                "status": "ANOMALY" if z_score > Z_THRESHOLD else "NORMAL",
+                "status": classify_z_score(z_score),
             }
         )
 
