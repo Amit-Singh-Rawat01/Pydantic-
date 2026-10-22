@@ -21,7 +21,7 @@ import os
 from producer import send_error_to_kafka
 
 from fastapi.middleware.cors import CORSMiddleware
-from models import Error, Incident, RejectedEvent
+from models import AnomalyEvent, Error, Incident, RejectedEvent
 from incident_detector import resolve_stale_incidents
 from baseline import calculate_anomaly_scores, calculate_baseline
 
@@ -410,6 +410,49 @@ def get_rejected_events(
             for event in events
         ],
     }
+
+
+@app.post("/anomaly-events", status_code=201)
+def create_anomaly_event(
+    event: schemas.AnomalyEventIn,
+    db: Session = Depends(get_db),
+):
+    row = AnomalyEvent(
+        service_name=event.service_name,
+        old_status=event.old_status,
+        new_status=event.new_status,
+        z_score=event.z_score,
+        current_rate=event.current_rate,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id}
+
+
+@app.get("/anomaly-events")
+def list_anomaly_events(
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(AnomalyEvent)
+        .order_by(AnomalyEvent.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": row.id,
+            "service_name": row.service_name,
+            "old_status": row.old_status,
+            "new_status": row.new_status,
+            "z_score": row.z_score,
+            "current_rate": row.current_rate,
+            "detected_at": row.detected_at,
+        }
+        for row in rows
+    ]
 
 
 @app.get("/incidents/{incident_id}")

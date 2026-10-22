@@ -2,6 +2,7 @@ from sqlalchemy import (
     BigInteger,
     Column,
     DateTime,
+    Float,
     Integer,
     String,
     Text,
@@ -59,3 +60,15 @@ class RejectedEvent(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class AnomalyEvent(Base):
+    __tablename__ = "anomaly_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    service_name = Column(String, nullable=False)
+    old_status = Column(String, nullable=True)
+    new_status = Column(String, nullable=False)
+    z_score = Column(Float, nullable=True)
+    current_rate = Column(Float, nullable=True)
+    detected_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -4,10 +4,28 @@ from datetime import datetime
 
 from pydantic import ValidationError
 
-from schemas import ErrorEventSchema, Severity
+from schemas import AnomalyEventIn, ErrorEventSchema, Severity
 
 
 class ErrorEventValidationTests(unittest.TestCase):
+    def test_anomaly_event_accepts_supported_statuses(self):
+        event = AnomalyEventIn(
+            service_name="payments",
+            old_status="NORMAL",
+            new_status="WARNING",
+            z_score=2.4,
+            current_rate=20,
+        )
+
+        self.assertEqual(event.new_status, "WARNING")
+
+    def test_anomaly_event_rejects_unsupported_status(self):
+        with self.assertRaises(ValidationError):
+            AnomalyEventIn(
+                service_name="payments",
+                new_status="BANANA",
+            )
+
     def test_valid_event_is_accepted(self):
         event = ErrorEventSchema(
             service_name="payments",

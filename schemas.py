@@ -1,7 +1,10 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime, timezone
 from enum import Enum
+
+
+Status = Literal["NORMAL", "WARNING", "ANOMALY", "NO_DATA"]
 
 
 class Severity(str, Enum):
@@ -56,3 +59,11 @@ class IncidentResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AnomalyEventIn(BaseModel):
+    service_name: str
+    old_status: Optional[Status] = None
+    new_status: Status
+    z_score: Optional[float] = None
+    current_rate: Optional[float] = None
