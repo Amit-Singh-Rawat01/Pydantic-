@@ -1,5 +1,12 @@
 # React + TypeScript + Vite
 
+## Anomaly events
+
+The watcher sends status changes to `POST /anomaly-events`.
+The backend saves each event in the `anomaly_events` table.
+The dashboard fetches saved events from `GET /anomaly-events` every five seconds.
+Events remain available after the watcher stops because they are read from the database.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

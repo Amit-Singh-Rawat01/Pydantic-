@@ -4,6 +4,7 @@ import FailingServicesChart from "./components/FailingServicesChart";
 import SeverityChart from "./components/SeverityChart";
 import ErrorsList from "./components/ErrorsList";
 import IncidentsList from "./components/IncidentsList";
+import AnomalyEvents from "./components/AnomalyEvents";
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
       </div>
       <ErrorsList />
       <IncidentsList />
+      <AnomalyEvents />
     </div>
   );
 }
