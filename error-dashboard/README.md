@@ -1,5 +1,13 @@
 # React + TypeScript + Vite
 
+## Service health
+
+The dashboard polls `GET /metrics/anomaly-score` every five seconds for live per-service status; anomaly events remain a separate history endpoint.
+The backend compares the latest complete minute with a baseline of up to 30 earlier complete minutes, treating quiet minutes as zero.
+It computes z-score as `(current errors - baseline mean) / max(baseline standard deviation, 1)`.
+Scores below 2 are `NORMAL`, from 2 to below 3 are `WARNING`, and 3 or higher are `ANOMALY`; fewer than five history minutes produce `NO_DATA`.
+For example, the backend spike test reports 60 current errors/min, a 3.33 mean, z-score 7.47, and `ANOMALY`.
+
 ## Anomaly events
 
 The watcher sends status changes to `POST /anomaly-events`.

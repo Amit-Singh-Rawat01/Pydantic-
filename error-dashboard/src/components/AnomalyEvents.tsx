@@ -1,5 +1,6 @@
 import useAutoRefresh from "../hooks/useAutoRefresh";
 import AsyncSection from "./AsyncSection";
+import { statusColor } from "./statusStyles";
 
 type AnomalyEvent = {
   id: number;
@@ -9,12 +10,6 @@ type AnomalyEvent = {
   z_score: number | null;
   detected_at: string;
 };
-
-function statusColor(status: string) {
-  if (status === "ANOMALY") return "bg-red-100 text-red-700";
-  if (status === "WARNING") return "bg-yellow-100 text-yellow-700";
-  return "bg-green-100 text-green-700";
-}
 
 function AnomalyEvents() {
   const { data: events, loading, error } = useAutoRefresh<AnomalyEvent[]>(
