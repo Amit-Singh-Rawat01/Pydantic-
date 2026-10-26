@@ -6,6 +6,7 @@ import ErrorsList from "./components/ErrorsList";
 import IncidentsList from "./components/IncidentsList";
 import AnomalyEvents from "./components/AnomalyEvents";
 import ServiceHealth from "./components/ServiceHealth";
+import ErrorGroups from "./components/ErrorGroups";
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <FailingServicesChart />
         <SeverityChart />
       </div>
+      <ErrorGroups />
       <ErrorsList />
       <IncidentsList />
       <AnomalyEvents />

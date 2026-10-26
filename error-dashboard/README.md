@@ -15,6 +15,13 @@ The backend saves each event in the `anomaly_events` table.
 The dashboard fetches saved events from `GET /anomaly-events` every five seconds.
 Events remain available after the watcher stops because they are read from the database.
 
+## Error groups
+
+`GET /error-groups` groups errors from the last 15 minutes by fingerprint, service, and error type, ordered by count.
+The dashboard refreshes the group list every five seconds and shows the total errors alongside the number of groups.
+Grouping repeated errors makes fingerprinting visible and reduces alert noise: an incident is tracked for a group, not created for every individual error.
+Only the ten most frequent groups are shown.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

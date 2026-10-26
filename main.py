@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from database import (
@@ -315,19 +315,23 @@ def get_anomaly_score(db: Session = Depends(get_db)):
 def get_error_groups(
     db: Session = Depends(get_db),
 ):
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
+        minutes=15
+    )
     results = (
         db.query(
             models.Error.fingerprint,
             models.Error.service_name,
             models.Error.error_type,
             func.count(models.Error.id).label("count"),
-            func.min(
-                models.Error.occurred_at
-            ).label("first_seen"),
             func.max(
                 models.Error.occurred_at
             ).label("last_seen"),
+            func.max(
+                models.Error.message
+            ).label("sample_message"),
         )
+        .filter(models.Error.occurred_at >= since)
         .group_by(
             models.Error.fingerprint,
             models.Error.service_name,
@@ -345,16 +349,12 @@ def get_error_groups(
             "service_name": r.service_name,
             "error_type": r.error_type,
             "count": r.count,
-            "first_seen": (
-                r.first_seen.isoformat()
-                if r.first_seen
-                else None
-            ),
             "last_seen": (
                 r.last_seen.isoformat()
                 if r.last_seen
                 else None
             ),
+            "sample_message": r.sample_message,
         }
         for r in results
     ]
