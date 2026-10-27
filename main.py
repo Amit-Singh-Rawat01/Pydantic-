@@ -313,10 +313,11 @@ def get_anomaly_score(db: Session = Depends(get_db)):
 # Day 26: Group errors by fingerprint
 @app.get("/error-groups")
 def get_error_groups(
+    minutes: int = Query(default=15, ge=1, le=60),
     db: Session = Depends(get_db),
 ):
     since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
-        minutes=15
+        minutes=minutes
     )
     results = (
         db.query(
@@ -364,7 +365,7 @@ def get_error_groups(
 def get_legacy_error_groups(
     db: Session = Depends(get_db),
 ):
-    return get_error_groups(db)
+    return get_error_groups(minutes=15, db=db)
 
 @app.get("/incidents", response_model=list[schemas.IncidentResponse])
 def get_incidents(

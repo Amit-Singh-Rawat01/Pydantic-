@@ -17,10 +17,12 @@ Events remain available after the watcher stops because they are read from the d
 
 ## Error groups
 
-`GET /error-groups` groups errors from the last 15 minutes by fingerprint, service, and error type, ordered by count.
+`GET /error-groups` groups errors by fingerprint, service, and error type, ordered by count; its `minutes` query parameter accepts 1–60 and defaults to 15.
 The dashboard refreshes the group list every five seconds and shows the total errors alongside the number of groups.
 Grouping repeated errors makes fingerprinting visible and reduces alert noise: an incident is tracked for a group, not created for every individual error.
 Only the ten most frequent groups are shown.
+Service Health cards with `WARNING` or `ANOMALY` status request the same endpoint with `minutes=5` and show that service's most frequent error group as a hint.
+This hint connects the affected service to a likely explanation, but is not a confirmed root cause: the most frequent error may not be the error that triggered the anomaly.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
