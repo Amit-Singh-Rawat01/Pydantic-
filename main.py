@@ -305,6 +305,18 @@ def get_baseline(
     return calculate_baseline(db, lookback_minutes)
 
 
+@app.get("/metrics/total-errors")
+def get_total_errors(
+    service_name: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(func.count(Error.id))
+    if service_name:
+        query = query.filter(Error.service_name == service_name)
+    total = query.scalar()
+    return {"total": total}
+
+
 @app.get("/metrics/anomaly-score")
 def get_anomaly_score(db: Session = Depends(get_db)):
     return calculate_anomaly_scores(db)

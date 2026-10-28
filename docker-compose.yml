@@ -25,6 +25,8 @@ services:
       - kafka
     ports:
       - "8000:8000"
+    volumes:
+      - ./main.py:/app/main.py:ro
     environment:
              DB_HOST: db
              DB_PORT: 5432

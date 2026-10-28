@@ -1,0 +1,2 @@
+label,events,send_seconds,pipeline_seconds,events_per_sec
+baseline,1000,13.2,41.06,24.35
