@@ -29,17 +29,24 @@ class ConsumerOffsetTests(unittest.TestCase):
         self.assertIsInstance(keywords["enable_auto_commit"], ast.Constant)
         self.assertFalse(keywords["enable_auto_commit"].value)
 
-    def test_offsets_are_committed_manually_after_processing_paths(self):
-        commit_calls = [
+    def test_offsets_are_committed_in_batches_after_processing_paths(self):
+        kafka_commit_calls = [
             node
             for node in ast.walk(self.tree)
             if isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
             and node.func.attr == "commit"
+            and isinstance(node.func.value, ast.Attribute)
+            and isinstance(node.func.value.value, ast.Name)
+            and node.func.value.value.id == "self"
+            and node.func.value.attr == "consumer"
         ]
 
-        self.assertGreaterEqual(len(commit_calls), 2)
-        self.assertIn("consumer.commit()", self.source)
+        self.assertEqual(len(kafka_commit_calls), 1)
+        self.assertIn("committer = BatchCommitter(consumer)", self.source)
+        self.assertEqual(self.source.count("committer.event_done()"), 2)
+        self.assertIn("self.pending >= self.every", self.source)
+        self.assertIn("self.interval", self.source)
         self.assertIn("rejected_saved = save_rejected_event", self.source)
 
     def test_postgres_insert_is_idempotent_by_kafka_coordinates(self):
@@ -83,7 +90,7 @@ class ConsumerOffsetTests(unittest.TestCase):
             "db.commit()", insert_position
         )
         offset_commit_position = self.source.index(
-            "consumer.commit()", crash_position
+            "committer.event_done()", crash_position
         )
 
         self.assertLess(insert_position, crash_position)

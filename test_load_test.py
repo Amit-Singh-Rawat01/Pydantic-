@@ -56,7 +56,7 @@ class LoadTestTests(unittest.TestCase):
 
         self.assertTrue(succeeded)
         self.assertEqual(rows[0][0:2], ["label", "events"])
-        self.assertEqual(rows[1][0:2], ["baseline", "1"])
+        self.assertEqual(rows[1][0:2], ["commit-100", "1"])
         self.assertEqual(rows[1][4], "0.5")
         mocked_send.assert_called_once_with()
         mocked_flush.assert_called_once_with()
@@ -82,6 +82,53 @@ class LoadTestTests(unittest.TestCase):
     def test_rejects_non_positive_event_count(self):
         with self.assertRaises(ValueError):
             load_test.run(0)
+
+        with self.assertRaises(ValueError):
+            load_test.run_drain(0)
+
+    @patch("load_test.time.sleep")
+    @patch("load_test.time.monotonic", side_effect=[100, 101, 102, 103, 104])
+    @patch("load_test.flush_sender")
+    @patch("load_test.send_one_event")
+    @patch("load_test.get_total", side_effect=[10, 10, 11, 11, 14, 14])
+    def test_drain_records_consumer_only_throughput(
+        self,
+        mocked_get_total,
+        mocked_send,
+        mocked_flush,
+        mocked_monotonic,
+        mocked_sleep,
+    ):
+        with tempfile.TemporaryDirectory() as directory:
+            results_file = Path(directory) / "load_test_results.csv"
+            with patch.object(load_test, "RESULTS_FILE", results_file):
+                with patch.object(load_test, "LABEL", "commit-100"):
+                    succeeded = load_test.run_drain(4)
+
+            with results_file.open(newline="", encoding="utf-8") as results:
+                rows = list(csv.reader(results))
+
+        self.assertTrue(succeeded)
+        self.assertEqual(rows[0][0:2], ["label", "events"])
+        self.assertEqual(rows[1], ["commit-100-drain", "4", "", "2", "2"])
+        self.assertEqual(mocked_send.call_count, 4)
+        mocked_flush.assert_called_once_with()
+        mocked_sleep.assert_any_call(0.1)
+        mocked_sleep.assert_any_call(2)
+
+    @patch("load_test.time.monotonic", side_effect=[100, 401])
+    @patch("load_test.flush_sender")
+    @patch("load_test.send_one_event")
+    @patch("load_test.get_total", return_value=10)
+    def test_drain_times_out_before_consumer_starts(
+        self,
+        mocked_get_total,
+        mocked_send,
+        mocked_flush,
+        mocked_monotonic,
+    ):
+        with patch("load_test.time.sleep"):
+            self.assertFalse(load_test.run_drain(1))
 
 
 if __name__ == "__main__":

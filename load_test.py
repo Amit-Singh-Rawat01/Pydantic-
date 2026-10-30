@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 
 
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000").rstrip("/")
-LABEL = "baseline"
+LABEL = "commit-100"
 TIMEOUT_SECONDS = 300
 REQUEST_TIMEOUT_SECONDS = 5
 RESULTS_FILE = Path(__file__).with_name("load_test_results.csv")
@@ -96,10 +96,72 @@ def run(n):
     return True
 
 
+def run_drain(n):
+    """Queue events while the consumer is stopped, then measure its drain speed."""
+    if n <= 0:
+        raise ValueError("The number of events must be greater than zero")
+
+    start_total = get_total()
+
+    for _ in range(n):
+        send_one_event()
+    flush_sender()
+    print(f"{n} events jama ho gaye. Ab consumer chalu karo.")
+
+    wait_started = time.monotonic()
+    while get_total() == start_total:
+        if time.monotonic() - wait_started > TIMEOUT_SECONDS:
+            print("Timeout: sab events DB tak nahi pahunche")
+            return False
+        time.sleep(0.1)
+    t0 = time.monotonic()
+
+    while get_total() < start_total + n:
+        if time.monotonic() - t0 > TIMEOUT_SECONDS:
+            print("Timeout: sab events DB tak nahi pahunche")
+            return False
+        time.sleep(0.5)
+    drain_time = max(time.monotonic() - t0, 0.001)
+
+    time.sleep(2)
+    extra = get_total() - (start_total + n)
+
+    print(f"consumer ki speed : {n / drain_time:.0f} events/sec ({drain_time:.1f}s)")
+    print(f"extra/duplicate   : {extra}")
+
+    new_file = not RESULTS_FILE.exists() or RESULTS_FILE.stat().st_size == 0
+    with RESULTS_FILE.open("a", newline="", encoding="utf-8") as results:
+        writer = csv.writer(results)
+        if new_file:
+            writer.writerow(
+                [
+                    "label",
+                    "events",
+                    "send_seconds",
+                    "pipeline_seconds",
+                    "events_per_sec",
+                ]
+            )
+        writer.writerow(
+            [
+                f"{LABEL}-drain",
+                n,
+                "",
+                round(drain_time, 2),
+                round(n / drain_time),
+            ]
+        )
+    return True
+
+
 if __name__ == "__main__":
     try:
         event_count = int(sys.argv[1]) if len(sys.argv) > 1 else 1000
-        succeeded = run(event_count)
+        mode = sys.argv[2] if len(sys.argv) > 2 else "end-to-end"
+        if mode == "drain":
+            succeeded = run_drain(event_count)
+        else:
+            succeeded = run(event_count)
     except ValueError as error:
         print(f"Invalid event count: {error}", file=sys.stderr)
         sys.exit(2)

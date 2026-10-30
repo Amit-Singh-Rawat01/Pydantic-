@@ -43,3 +43,40 @@ DELETE FROM errors WHERE service_name = 'load-test';
 DELETE FROM incidents WHERE service_name = 'load-test';
 DELETE FROM anomaly_events WHERE service_name = 'load-test';
 ```
+
+## Day 55: Batch Kafka offset commits
+
+The consumer now commits offsets after every 100 successfully handled messages
+or when the 5-second interval is reached while processing messages. Both saved
+events and persisted rejected events count toward the batch. PostgreSQL is still
+committed before the Kafka offset, and the Day 41 Kafka partition/offset
+uniqueness check makes redelivered events safe after a crash.
+
+Use drain mode to queue the events before starting the consumer. Keep the
+backend, PostgreSQL, and Kafka running; stop the consumer, simulators, and
+anomaly watcher. For the per-event baseline use the pre-Day-55 consumer, or set
+`BatchCommitter(consumer, every=1)` to emulate its commit frequency. Then start
+the consumer when prompted. Set `LABEL` and the committer batch size for each
+run:
+
+```text
+python load_test.py 10000 drain
+```
+
+Run once each with labels `commit-1`, `commit-100` (batch size 100), and
+`commit-500` (batch size 500). For every run, wait for the output and check that
+`extra/duplicate` is 0. The drain results are appended to
+`load_test_results.csv`. Repeat the run with the label `chaos`, stopping and
+restarting the consumer twice while it drains; all events should eventually
+reach PostgreSQL and the extra count should remain 0.
+
+| Label | Consumer events/sec |
+|---|---:|
+| commit-1 | Not measured |
+| commit-100 | Not measured |
+| commit-500 | Not measured |
+
+These Day 55 measurements and the chaos run have not yet been run against the
+live services. Batch commits reduce offset-commit requests, but a crash can
+redeliver up to the uncommitted batch; the database uniqueness check prevents
+those redeliveries from becoming duplicate error rows.

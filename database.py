@@ -79,6 +79,16 @@ def ensure_incident_status_column():
         )
 
 
+def ensure_incident_sample_message_column():
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE incidents "
+                "ADD COLUMN IF NOT EXISTS sample_message TEXT"
+            )
+        )
+
+
 def get_db():
     db = SessionLocal()
     try:

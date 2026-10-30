@@ -24,6 +24,27 @@ MAX_REASON_LENGTH = 500
 CRASH_AFTER = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
 
+class BatchCommitter:
+    """Commit Kafka offsets after a batch of processed events or elapsed time."""
+
+    def __init__(self, consumer, every=100, interval=5):
+        self.consumer = consumer
+        self.every = every
+        self.interval = interval
+        self.pending = 0
+        self.last_commit = time.monotonic()
+
+    def event_done(self):
+        self.pending += 1
+        if (
+            self.pending >= self.every
+            or time.monotonic() - self.last_commit >= self.interval
+        ):
+            self.consumer.commit()
+            self.pending = 0
+            self.last_commit = time.monotonic()
+
+
 def save_rejected_event(raw_payload, reason):
     if isinstance(raw_payload, bytes):
         raw_payload = raw_payload.decode("utf-8", errors="replace")
@@ -108,6 +129,7 @@ def create_consumer_with_retry():
 
 while True:
     consumer = create_consumer_with_retry()
+    committer = BatchCommitter(consumer)
 
     print(
         f"Consumer started. Kafka: {KAFKA_BOOTSTRAP_SERVERS}"
@@ -207,8 +229,7 @@ while True:
                         )
                         os._exit(1)
 
-                consumer.commit()
-                print("Kafka offset committed after successful processing.")
+                committer.event_done()
 
             except (
                 UnicodeDecodeError,
@@ -225,8 +246,7 @@ while True:
                     raise RuntimeError(
                         "Rejected event could not be persisted; offset not committed"
                     )
-                consumer.commit()
-                print("Kafka offset committed after rejected event was saved.")
+                committer.event_done()
 
             except Exception as e:
                 if db:

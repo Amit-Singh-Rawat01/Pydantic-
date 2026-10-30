@@ -7,6 +7,7 @@ from database import (
     engine,
     ensure_error_fingerprint_column,
     ensure_incident_fingerprint_column,
+    ensure_incident_sample_message_column,
     ensure_incident_status_column,
     get_db,
 )
@@ -31,6 +32,7 @@ from baseline import calculate_anomaly_scores, calculate_baseline
 Base.metadata.create_all(bind=engine)
 ensure_error_fingerprint_column()
 ensure_incident_fingerprint_column()
+ensure_incident_sample_message_column()
 ensure_incident_status_column()
 
 
