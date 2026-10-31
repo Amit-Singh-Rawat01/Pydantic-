@@ -5,6 +5,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -40,10 +41,22 @@ def flush_sender():
 
 
 def get_total():
-    with urlopen(
-        f"{API_URL}/metrics/total-errors?{urlencode({'service_name': 'load-test'})}",
-        timeout=REQUEST_TIMEOUT_SECONDS,
-    ) as response:
+    metrics_url = (
+        f"{API_URL}/metrics/total-errors?"
+        f"{urlencode({'service_name': 'load-test'})}"
+    )
+    try:
+        with urlopen(metrics_url, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            return json.load(response)["total"]
+    except HTTPError as error:
+        if error.code != 404:
+            raise
+        errors_url = (
+            f"{API_URL}/errors?"
+            f"{urlencode({'service_name': 'load-test', 'limit': 1})}"
+        )
+
+    with urlopen(errors_url, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         return json.load(response)["total"]
 
 

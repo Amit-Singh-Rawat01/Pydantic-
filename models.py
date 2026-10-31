@@ -28,7 +28,7 @@ class Error(Base):
     message = Column(Text, nullable=False)
     severity = Column(String, nullable=False)
     stack_trace = Column(Text, nullable=True)
-    occurred_at = Column(DateTime, default=func.now())
+    occurred_at = Column(DateTime, default=func.now(), index=True)
     fingerprint = Column(String, index=True)  
     kafka_partition = Column(Integer, nullable=True)
     kafka_offset = Column(BigInteger, nullable=True)

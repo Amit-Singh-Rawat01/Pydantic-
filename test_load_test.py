@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.error import HTTPError
 from unittest.mock import patch
 
 import load_test
@@ -18,6 +19,33 @@ class LoadTestTests(unittest.TestCase):
         self.assertEqual(load_test.get_total(), 12)
         self.assertIn(
             "/metrics/total-errors?service_name=load-test",
+            mocked_urlopen.call_args.args[0],
+        )
+
+    @patch("load_test.urlopen")
+    def test_reads_total_from_errors_endpoint_when_metrics_route_is_missing(
+        self, mocked_urlopen
+    ):
+        response = mocked_urlopen.return_value
+        response.__enter__.return_value.read.return_value = b'{"total": 12}'
+        response.__enter__.return_value.__iter__.return_value = iter(
+            [b'{"total": 12}']
+        )
+        mocked_urlopen.side_effect = [
+            HTTPError(
+                "http://example.test/metrics/total-errors",
+                404,
+                "Not Found",
+                {},
+                None,
+            ),
+            response,
+        ]
+
+        self.assertEqual(load_test.get_total(), 12)
+        self.assertEqual(mocked_urlopen.call_count, 2)
+        self.assertIn(
+            "/errors?service_name=load-test&limit=1",
             mocked_urlopen.call_args.args[0],
         )
 

@@ -47,6 +47,16 @@ def ensure_error_fingerprint_column():
         )
 
 
+def ensure_error_occurred_at_index():
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_errors_occurred_at "
+                "ON errors (occurred_at)"
+            )
+        )
+
+
 def ensure_incident_fingerprint_column():
     with engine.begin() as connection:
         connection.execute(

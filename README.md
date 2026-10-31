@@ -80,3 +80,63 @@ These Day 55 measurements and the chaos run have not yet been run against the
 live services. Batch commits reduce offset-commit requests, but a crash can
 redeliver up to the uncommitted batch; the database uniqueness check prevents
 those redeliveries from becoming duplicate error rows.
+
+## Day 56: Index the error timestamp
+
+The `errors.occurred_at` index supports time-based queries against the real
+errors table. It is declared in the SQLAlchemy model and ensured at backend
+startup for existing databases. Creating an index adds work to writes, so
+compare the consumer drain rate before and after the index with the same
+10,000-event test.
+
+To benchmark query speed independently of application data, run
+[`perf/index_experiment.sql`](./perf/index_experiment.sql) against PostgreSQL.
+It recreates only the synthetic `errors_big` table, with 500,000 rows spread
+over the last seven days, and runs the same 15-minute aggregate query before
+and after adding the timestamp index. Run each `EXPLAIN ANALYZE` query two or
+three times and record the smallest `Execution Time`; note the scan plan too.
+The planner may show `Bitmap Index Scan` rather than `Index Scan` when that is
+the cheaper choice.
+
+Before measuring the consumer, check which indexes already exist:
+
+```sql
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'errors';
+```
+
+At the time of this run, `errors` had `errors_pkey`, `ix_errors_fingerprint`,
+`ix_errors_id`, and `uq_kafka_partition_offset`; it did not yet have an index
+on `occurred_at`.
+
+If `ix_errors_occurred_at` is absent, capture the before-index drain rate
+before applying the SQL below or restarting the backend with this change
+(startup automatically ensures the index). Run `python load_test.py 10000 drain`
+with the consumer stopped while the events are queued. Start the consumer when
+prompted and record its events/sec. Then add the index:
+
+```sql
+CREATE INDEX IF NOT EXISTS ix_errors_occurred_at ON errors (occurred_at);
+```
+
+Repeat the same drain test with the same services and settings. If the index
+already existed before the first run, there is no valid before/after comparison
+to report. Check that `extra/duplicate` stays at 0. Once the synthetic query
+results are recorded, remove only its benchmark table:
+
+```sql
+DROP TABLE errors_big;
+```
+
+| Test | Before index | After index |
+|---|---|---|
+| Query: errors from the last 15 minutes (500,000 synthetic rows) | 40.466 ms (Parallel Seq Scan) | 1.143 ms (Bitmap Index Scan; about 35.4x faster) |
+| Consumer drain, 10,000 events | Not measured: 36,758 older Kafka events were already queued | Not measured yet |
+
+The 500,000 rows are synthetic and used only to benchmark query speed. The
+query timings are measured by PostgreSQL. The drain comparison could not be
+isolated because the Kafka consumer group already had 36,758 older events
+queued before the test. The test events were queued and the consumer was
+restarted to resume processing; do not treat the resulting backlog drain as a
+10,000-event benchmark.
