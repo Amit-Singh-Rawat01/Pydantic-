@@ -72,3 +72,17 @@ class AnomalyEvent(Base):
     z_score = Column(Float, nullable=True)
     current_rate = Column(Float, nullable=True)
     detected_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AnomalyIncident(Base):
+    __tablename__ = "anomaly_incidents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    service_name = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False, default="OPEN")
+    started_at = Column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    resolved_at = Column(DateTime, nullable=True)

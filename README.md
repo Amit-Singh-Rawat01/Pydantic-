@@ -140,3 +140,12 @@ isolated because the Kafka consumer group already had 36,758 older events
 queued before the test. The test events were queued and the consumer was
 restarted to resume processing; do not treat the resulting backlog drain as a
 10,000-event benchmark.
+
+## Day 57: Anomaly incidents
+
+An `ANOMALY` event opens an incident for that service unless one is already
+open; repeated anomaly events do not create duplicates. A `NORMAL` event
+resolves the open incident and records `resolved_at`, while `WARNING` leaves
+incident state unchanged. `GET /anomaly-incidents` lists the latest 50
+incidents and accepts an optional `?status=OPEN` filter. Live stopwatch
+measurements (spike-to-open and switch-off-to-resolved) have not been taken.

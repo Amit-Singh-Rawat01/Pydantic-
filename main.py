@@ -23,7 +23,8 @@ import os
 from producer import send_error_to_kafka
 
 from fastapi.middleware.cors import CORSMiddleware
-from models import AnomalyEvent, Error, Incident, RejectedEvent
+from models import AnomalyEvent, AnomalyIncident, Error, Incident, RejectedEvent
+from anomaly_incidents import handle_anomaly_event
 from incident_detector import resolve_stale_incidents
 from baseline import calculate_anomaly_scores, calculate_baseline
 
@@ -444,6 +445,11 @@ def create_anomaly_event(
     db.add(row)
     db.commit()
     db.refresh(row)
+    try:
+        handle_anomaly_event(db, event.service_name, event.new_status)
+    except Exception as e:
+        db.rollback()
+        print(f"[incident] sync fail hua: {e}")
     return {"id": row.id}
 
 
@@ -467,6 +473,31 @@ def list_anomaly_events(
             "z_score": row.z_score,
             "current_rate": row.current_rate,
             "detected_at": row.detected_at,
+        }
+        for row in rows
+    ]
+
+
+@app.get("/anomaly-incidents")
+def list_anomaly_incidents(
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(AnomalyIncident)
+    if status:
+        query = query.filter(AnomalyIncident.status == status.upper())
+    rows = (
+        query.order_by(AnomalyIncident.started_at.desc())
+        .limit(50)
+        .all()
+    )
+    return [
+        {
+            "id": row.id,
+            "service_name": row.service_name,
+            "status": row.status,
+            "started_at": row.started_at,
+            "resolved_at": row.resolved_at,
         }
         for row in rows
     ]
