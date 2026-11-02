@@ -149,3 +149,38 @@ resolves the open incident and records `resolved_at`, while `WARNING` leaves
 incident state unchanged. `GET /anomaly-incidents` lists the latest 50
 incidents and accepts an optional `?status=OPEN` filter. Live stopwatch
 measurements (spike-to-open and switch-off-to-resolved) have not been taken.
+
+## Day 59: Chain fire drill
+
+`chain_test.py` automates the spike-to-incident-to-resolved timing test. It
+defaults to the `payment-service` simulator and its file-existence switch,
+`fail_payment-service.flag`; switch files are created beside the script, where
+`service_simulator.py` looks for them. Change `TARGET_SERVICE` in the script
+before testing another service. The API defaults to `http://127.0.0.1:8000`;
+set `API_URL` to use another backend address.
+
+Start PostgreSQL, Kafka, the backend, consumer, service simulators, and anomaly
+watcher. Let the services build their baseline before the test, and resolve or
+clear any old open anomaly incident for the target service. Then run:
+
+```text
+python chain_test.py
+```
+
+Each round turns the switch on until the target incident opens, holds the
+failure for 30 seconds, turns it off, and waits for that incident to resolve.
+The defaults are three rounds, a 60-second cooldown, and a 180-second timeout
+per wait. Change the constants at the top of the script for a dry run or a
+different test duration. The switch is turned off when the script exits.
+
+Results are appended to `chain_test_results.csv` beside the script, including a
+status for passed, failed, skipped, and API-error rounds. Detection and
+recovery values are in whole seconds; summary output reports average, minimum,
+and maximum. Live timings have not been measured yet:
+
+| Round | Detection (spike ON to incident OPEN) | Recovery (spike OFF to RESOLVED) |
+|---|---:|---:|
+| 1 | Not measured | Not measured |
+| 2 | Not measured | Not measured |
+| 3 | Not measured | Not measured |
+| Average | Not measured | Not measured |
