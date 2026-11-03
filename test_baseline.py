@@ -50,8 +50,8 @@ class BaselineTests(unittest.TestCase):
                 "window_end": "2026-10-13T17:19:00",
                 "lookback_minutes": 4,
                 "services": [
-                    {"service": "auth", "mean": 0.75, "std_dev": 1.3},
-                    {"service": "payment", "mean": 5.5, "std_dev": 5.55},
+                    {"service": "auth", "mean": 0, "std_dev": 1},
+                    {"service": "payment", "mean": 5, "std_dev": 7.41},
                 ],
             },
         )

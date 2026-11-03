@@ -55,9 +55,9 @@ class AnomalyScoreTests(unittest.TestCase):
                 {
                     "service": "payment",
                     "current": 60,
-                    "mean": 3.33,
-                    "std_dev": 7.58,
-                    "z_score": 7.47,
+                    "mean": 0,
+                    "std_dev": 1,
+                    "z_score": 60,
                     "status": "ANOMALY",
                 }
             ],

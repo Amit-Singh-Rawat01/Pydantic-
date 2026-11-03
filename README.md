@@ -184,3 +184,37 @@ and maximum. Live timings have not been measured yet:
 | 2 | Not measured | Not measured |
 | 3 | Not measured | Not measured |
 | Average | Not measured | Not measured |
+
+## Day 60: Robust baseline (median and MAD)
+
+The baseline now uses the median and median absolute deviation (MAD), with a
+minimum sigma to avoid division by zero. This reduces baseline poisoning when
+spike minutes are included in the lookback window. The existing `mean` and
+`std_dev` response fields are retained for compatibility; their values now
+represent the median and robust sigma. Both `/metrics/baseline` and anomaly
+scoring use the same helper in `robust_stats.py`.
+
+Run `python poison_lab.py` to compare the mean/std-dev and median/MAD baselines
+using repeated spikes. This verifies the robust-statistics example without
+requiring the live services.
+
+Live run on 2026-11-03: the target had a robust baseline of `0.00` and sigma
+`1.00` before the chain test and the same values afterward. Historical
+pre-change baseline readings and Day 59 chain timings were not recorded:
+
+| Baseline (target service) | mean / median | std_dev / sigma |
+|---|---:|---:|
+| Before spike (old baseline) | Not measured | Not measured |
+| After one spike (old baseline) | Not measured | Not measured |
+| Before and after spike (robust baseline) | 0.00 | 1.00 |
+
+| Chain test (3 rounds) | Detection | Recovery |
+|---|---:|---:|
+| Day 59 (old baseline) | Not measured | Not measured |
+| Day 60 (robust baseline) | Round 1: 42 s; rounds 2-3 skipped | Round 1: >180 s; rounds 2-3 skipped |
+
+The Day 60 chain test did not pass: the first round opened an incident but did
+not resolve within the 180-second timeout, so the remaining rounds were
+skipped because the incident stayed open. A first attempt made before Redis
+was started failed detection in all three rounds; those failures are not
+included in the Day 60 timing above.

@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta
-from statistics import mean, pstdev, stdev
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from robust_stats import robust_baseline
 
 
 BASELINE_MINUTES = 30
@@ -50,11 +51,12 @@ def calculate_baseline(
     for service_name, counts in sorted(counts_by_service.items()):
         quiet_minutes = lookback_minutes - len(counts)
         counts = counts + [0] * max(0, quiet_minutes)
+        median, sigma = robust_baseline(counts)
         services.append(
             {
                 "service": service_name,
-                "mean": round(mean(counts), 2),
-                "std_dev": round(pstdev(counts), 2),
+                "mean": round(median, 2),
+                "std_dev": round(sigma, 2),
             }
         )
 
@@ -127,16 +129,15 @@ def calculate_anomaly_scores(db: Session):
             continue
 
         baseline_counts = history[-available_minutes:]
-        average = mean(baseline_counts)
-        std_dev = stdev(baseline_counts)
-        z_score = (current_count - average) / max(std_dev, 1)
+        median, sigma = robust_baseline(baseline_counts)
+        z_score = (current_count - median) / sigma
 
         results.append(
             {
                 "service": service_name,
                 "current": current_count,
-                "mean": round(average, 2),
-                "std_dev": round(std_dev, 2),
+                "mean": round(median, 2),
+                "std_dev": round(sigma, 2),
                 "z_score": round(z_score, 2),
                 "status": classify_z_score(z_score),
             }
