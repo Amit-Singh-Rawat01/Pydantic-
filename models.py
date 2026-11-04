@@ -86,3 +86,4 @@ class AnomalyIncident(Base):
         default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
     )
     resolved_at = Column(DateTime, nullable=True)
+    top_error = Column(String, nullable=True)

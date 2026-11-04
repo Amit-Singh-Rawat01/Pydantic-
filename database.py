@@ -99,6 +99,16 @@ def ensure_incident_sample_message_column():
         )
 
 
+def ensure_anomaly_incident_top_error_column():
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE anomaly_incidents "
+                "ADD COLUMN IF NOT EXISTS top_error VARCHAR"
+            )
+        )
+
+
 def get_db():
     db = SessionLocal()
     try:

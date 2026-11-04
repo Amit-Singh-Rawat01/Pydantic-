@@ -10,6 +10,7 @@ from database import (
     ensure_incident_fingerprint_column,
     ensure_incident_sample_message_column,
     ensure_incident_status_column,
+    ensure_anomaly_incident_top_error_column,
     get_db,
 )
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -37,6 +38,7 @@ ensure_error_occurred_at_index()
 ensure_incident_fingerprint_column()
 ensure_incident_sample_message_column()
 ensure_incident_status_column()
+ensure_anomaly_incident_top_error_column()
 
 
 app = FastAPI(title="Error Intelligence Platform")
@@ -498,6 +500,7 @@ def list_anomaly_incidents(
             "status": row.status,
             "started_at": row.started_at,
             "resolved_at": row.resolved_at,
+            "top_error": row.top_error,
         }
         for row in rows
     ]

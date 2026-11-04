@@ -218,3 +218,47 @@ not resolve within the 180-second timeout, so the remaining rounds were
 skipped because the incident stayed open. A first attempt made before Redis
 was started failed detection in all three rounds; those failures are not
 included in the Day 60 timing above.
+
+## Day 61: Top error on anomaly incidents
+
+When an anomaly opens an incident, the backend finds the most frequent
+`error_type` among that service's errors in the five-minute window ending at
+the service's newest `occurred_at` value. The resulting text is stored in
+`anomaly_incidents.top_error` and returned by `GET /anomaly-incidents`; it
+remains on the incident after resolution. The dashboard shows it in the
+“Kya toota” column. Incidents created before this change display `-`.
+
+The backend startup adds the nullable column to existing PostgreSQL databases
+with `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`; `create_all` alone does not
+alter an existing table. To check the aggregate manually, substitute a service
+name that exists in `errors`:
+
+```sql
+SELECT error_type, COUNT(*) AS n
+FROM errors
+WHERE service_name = 'payment'
+  AND occurred_at >= (
+        SELECT MAX(occurred_at) FROM errors WHERE service_name = 'payment'
+      ) - INTERVAL '5 minutes'
+GROUP BY error_type
+ORDER BY n DESC
+LIMIT 1;
+```
+
+### Demo flow
+
+1. Start PostgreSQL, Kafka, Redis, the backend, consumer, the service
+   simulators, anomaly watcher, and frontend.
+2. Let the services collect baseline data, then run `python chain_test.py` with
+   `ROUNDS = 1`.
+3. Confirm the incident changes from OPEN to RESOLVED after the spike is
+   switched off.
+4. Anomaly incident OPEN hota hai; ticket mein service, status aur sabse
+   zyada aane wala error (top error) likha hota hai.
+
+The live API check on `payment-service` returned
+`PaymentGatewayTimeout (136 errors, last 5 min)` and retained it after
+resolution. The one-round real spike test did not detect an incident within
+its 180-second timeout; the direct anomaly-event check verified the ticket
+field and its persistence across resolution. The dashboard capture is
+[`docs/anomaly-incident-open.png`](./docs/anomaly-incident-open.png).

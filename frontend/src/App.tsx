@@ -32,6 +32,15 @@ type IncidentItem = {
   last_seen: string
 }
 
+type AnomalyIncidentItem = {
+  id: number
+  service_name: string
+  status: 'OPEN' | 'RESOLVED'
+  started_at: string
+  resolved_at: string | null
+  top_error: string | null
+}
+
 type TimelinePoint = { minute: string; count: number }
 type ServiceStat = { service_name: string; count: number }
 type SeverityStat = { severity: string; count: number }
@@ -55,6 +64,7 @@ function App() {
   const [totalErrorCount, setTotalErrorCount] = useState(0)
   const [stats, setStats] = useState<Stats | null>(null)
   const [incidents, setIncidents] = useState<IncidentItem[]>([])
+  const [anomalyIncidents, setAnomalyIncidents] = useState<AnomalyIncidentItem[]>([])
   const [timeline, setTimeline] = useState<TimelinePoint[]>([])
   const [serviceStats, setServiceStats] = useState<ServiceStat[]>([])
   const [severityStats, setSeverityStats] = useState<SeverityStat[]>([])
@@ -76,6 +86,7 @@ function App() {
           fetch(`${API_BASE}/errors?limit=100`),
           fetch(`${API_BASE}/stats`),
           fetch(`${API_BASE}/incidents`),
+          fetch(`${API_BASE}/anomaly-incidents`),
           fetch(`${API_BASE}/stats/timeline`),
           fetch(`${API_BASE}/stats/by-service`),
           fetch(`${API_BASE}/stats/severity-breakdown`),
@@ -90,6 +101,7 @@ function App() {
           errorsData,
           statsData,
           incidentsData,
+          anomalyIncidentsData,
           timelineData,
           servicesData,
           severityData,
@@ -103,6 +115,7 @@ function App() {
         setTotalErrorCount(typeof errorPayload.total === 'number' ? errorPayload.total : 0)
         setStats(statsData as Stats)
         setIncidents(Array.isArray(incidentsData) ? incidentsData : [])
+        setAnomalyIncidents(Array.isArray(anomalyIncidentsData) ? anomalyIncidentsData : [])
         setTimeline(Array.isArray(timelinePayload.timeline) ? timelinePayload.timeline : [])
         setServiceStats(Array.isArray(servicesData) ? servicesData : [])
         setSeverityStats(Array.isArray(severityData) ? severityData : [])
@@ -290,6 +303,40 @@ function App() {
                 })}
               </div>
             )}
+          </div>
+        </section>
+
+        <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200" aria-label="Anomaly incidents">
+          <div className="mb-4">
+            <h2 className="text-xl font-bold">Anomaly Incidents</h2>
+            <p className="mt-1 text-xs text-slate-500">The top error is captured when an incident opens.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-600">
+                  <th className="p-2 font-semibold">Service</th>
+                  <th className="p-2 font-semibold">Status</th>
+                  <th className="p-2 font-semibold">Kya toota</th>
+                  <th className="p-2 font-semibold">Started</th>
+                </tr>
+              </thead>
+              <tbody>
+                {anomalyIncidents.map((incident) => (
+                  <tr key={incident.id} className="border-b border-slate-100">
+                    <td className="p-2">{incident.service_name}</td>
+                    <td className="p-2">{incident.status}</td>
+                    <td className="p-2 text-gray-700">{incident.top_error ?? '-'}</td>
+                    <td className="p-2 text-slate-500">{new Date(incident.started_at).toLocaleString()}</td>
+                  </tr>
+                ))}
+                {anomalyIncidents.length === 0 && (
+                  <tr>
+                    <td className="p-2 text-center text-slate-500" colSpan={4}>No anomaly incidents found.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </section>
 
