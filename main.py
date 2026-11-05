@@ -26,6 +26,7 @@ from producer import send_error_to_kafka
 from fastapi.middleware.cors import CORSMiddleware
 from models import AnomalyEvent, AnomalyIncident, Error, Incident, RejectedEvent
 from anomaly_incidents import handle_anomaly_event
+from correlation import find_correlation
 from incident_detector import resolve_stale_incidents
 from baseline import calculate_anomaly_scores, calculate_baseline
 
@@ -504,6 +505,11 @@ def list_anomaly_incidents(
         }
         for row in rows
     ]
+
+
+@app.get("/incident-correlation")
+def incident_correlation(db: Session = Depends(get_db)):
+    return find_correlation(db)
 
 
 @app.get("/incidents/{incident_id}")

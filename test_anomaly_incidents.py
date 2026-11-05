@@ -1,9 +1,11 @@
 import unittest
+from datetime import datetime, timedelta
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from anomaly_incidents import find_top_error, handle_anomaly_event
+from correlation import find_correlation
 from models import AnomalyIncident, Error
 
 
@@ -28,8 +30,6 @@ class AnomalyIncidentTests(unittest.TestCase):
         self.assertIsNone(incidents[0].resolved_at)
 
     def test_find_top_error_uses_five_minutes_from_latest_error(self):
-        from datetime import datetime, timedelta
-
         latest = datetime(2026, 1, 1, 12, 0)
         self.session.add_all(
             [
@@ -131,6 +131,96 @@ class AnomalyIncidentTests(unittest.TestCase):
         handle_anomaly_event(self.session, "test-service", "NORMAL")
 
         self.assertEqual(self.session.query(AnomalyIncident).count(), 0)
+
+    def test_find_correlation_returns_empty_without_related_open_incidents(self):
+        self.assertEqual(
+            find_correlation(self.session),
+            {"root_cause": None, "affected": []},
+        )
+
+        self.session.add(
+            AnomalyIncident(service_name="svc-a", status="OPEN")
+        )
+        self.session.commit()
+
+        self.assertEqual(
+            find_correlation(self.session),
+            {"root_cause": None, "affected": []},
+        )
+
+    def test_find_correlation_orders_related_open_incidents_and_reports_lag(self):
+        start = datetime(2026, 1, 1, 12, 0)
+        self.session.add_all(
+            [
+                AnomalyIncident(
+                    service_name="svc-b",
+                    status="OPEN",
+                    started_at=start + timedelta(seconds=20),
+                    top_error="Order timeout",
+                ),
+                AnomalyIncident(
+                    service_name="svc-a",
+                    status="OPEN",
+                    started_at=start,
+                    top_error="Payment timeout",
+                ),
+                AnomalyIncident(
+                    service_name="resolved",
+                    status="RESOLVED",
+                    started_at=start + timedelta(seconds=10),
+                    top_error="Ignored error",
+                ),
+            ]
+        )
+        self.session.commit()
+
+        self.assertEqual(
+            find_correlation(self.session),
+            {
+                "root_cause": {
+                    "service_name": "svc-a",
+                    "started_at": start,
+                    "top_error": "Payment timeout",
+                },
+                "affected": [
+                    {
+                        "service_name": "svc-b",
+                        "lag_seconds": 20,
+                        "top_error": "Order timeout",
+                    }
+                ],
+            },
+        )
+
+        handle_anomaly_event(self.session, "svc-a", "NORMAL")
+
+        self.assertEqual(
+            find_correlation(self.session),
+            {"root_cause": None, "affected": []},
+        )
+
+    def test_find_correlation_only_groups_incidents_within_five_minutes(self):
+        start = datetime(2026, 1, 1, 12, 0)
+        self.session.add_all(
+            [
+                AnomalyIncident(
+                    service_name="svc-a",
+                    status="OPEN",
+                    started_at=start,
+                ),
+                AnomalyIncident(
+                    service_name="svc-b",
+                    status="OPEN",
+                    started_at=start + timedelta(minutes=5, seconds=1),
+                ),
+            ]
+        )
+        self.session.commit()
+
+        self.assertEqual(
+            find_correlation(self.session),
+            {"root_cause": None, "affected": []},
+        )
 
 
 if __name__ == "__main__":

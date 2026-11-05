@@ -1,5 +1,38 @@
 # Error Intelligence Platform
 
+## Root cause heuristic (cross-service correlation)
+
+`GET /incident-correlation` checks open anomaly incidents. If multiple
+incidents started within five minutes, it reports the earliest one as the
+probable root cause and the later incidents as affected, with their lag in
+seconds. This is a heuristic, not AI: an earlier incident is not necessarily
+the cause. Since the watcher checks every 10 seconds, `lag_seconds` can vary
+by roughly 10-15 seconds.
+
+Live switch test (Payment ON, then Order ON 20 seconds later):
+
+```json
+{
+  "root_cause": {
+    "service_name": "order-service",
+    "started_at": "2026-11-05T09:14:06.969508",
+    "top_error": "DatabaseConnectionError (86 errors, last 5 min)"
+  },
+  "affected": [
+    {
+      "service_name": "payment-service",
+      "lag_seconds": 0,
+      "top_error": "PaymentGatewayTimeout (124 errors, last 5 min)"
+    }
+  ]
+}
+```
+
+In this run, the watcher opened both incidents in the same observation, so
+their incident start times tied and the response could not recover the
+20-second switch order. The endpoint reports observed incident order, not
+causality or the time a failure switch was flipped.
+
 ## Day 54: Pipeline load test
 
 The load test sends events through `POST /errors` and waits for them to be
