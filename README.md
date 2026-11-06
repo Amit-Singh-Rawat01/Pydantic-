@@ -288,6 +288,8 @@ LIMIT 1;
    switched off.
 4. Anomaly incident OPEN hota hai; ticket mein service, status aur sabse
    zyada aane wala error (top error) likha hota hai.
+5. Agar dusri service bhi toote to Root Cause card batata hai ki pehle kaun
+   toota (andaaza, pakka nahi).
 
 The live API check on `payment-service` returned
 `PaymentGatewayTimeout (136 errors, last 5 min)` and retained it after
