@@ -18,9 +18,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import models
-import redis
 import schemas
-import os
+from redis.exceptions import RedisError
+from redis_client import redis_client
 from producer import send_error_to_kafka
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -53,21 +53,21 @@ app.add_middleware(
 )
 
 
-# Redis Connection Setup
-r = redis.Redis(
-    host=os.getenv("REDIS_HOST", "localhost"),
-    port=6379,
-    decode_responses=True,
-)
-
-
 VALID_SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
 
 @app.get("/health")
 def health_check():
+    redis_status = "ok"
+    try:
+        redis_client.ping()
+    except RedisError as error:
+        redis_status = "down"
+        print("Redis health check failed:", error)
+
     return {
-        "status": "running",
+        "status": "ok",
+        "redis": redis_status,
         "timestamp": datetime.utcnow().isoformat(),
     }
 

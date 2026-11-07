@@ -297,3 +297,35 @@ resolution. The one-round real spike test did not detect an incident within
 its 180-second timeout; the direct anomaly-event check verified the ticket
 field and its persistence across resolution. The dashboard capture is
 [`docs/anomaly-incident-open.png`](./docs/anomaly-incident-open.png).
+
+## Day 64: Redis client and read baseline
+
+`GET /stats` still reads its counts from PostgreSQL; Redis is not yet a cache
+for dashboard statistics. The `read_test.py` script measures 100 sequential
+requests so this is a pre-cache baseline:
+
+| Error rows | Requests | Average | Slowest |
+|---:|---:|---:|---:|
+| 50,377 | 100 | 31.6 ms | 82.6 ms |
+
+The initial row count was below 50,000, so `python load_test.py 7500` was run.
+That script timed out at its 300-second limit while the consumer was draining
+Kafka; the database had reached 50,377 rows by the time the read benchmark ran.
+The benchmark row count was unchanged before and after the 100 requests.
+
+Redis (`redis:7-alpine`) and the `redis` Python dependency were already
+declared in Docker Compose and `requirements.txt`. The shared
+`redis_client.py` reads `REDIS_HOST`/`REDIS_PORT` and has one-second connect
+and socket timeouts with retries disabled. The backend reports Redis
+availability without making it a dependency for backend health:
+
+```json
+{"status":"ok","redis":"ok","timestamp":"..."}
+{"status":"ok","redis":"down","timestamp":"..."}
+```
+
+Both responses were checked against the live backend; stopping Redis did not
+stop the backend, and the failed health check was printed in the backend log.
+The Redis command exercise returned `namaste`, counter values `1` and `2`,
+and `EXISTS errors:payment` returned `0` after the 60-second expiration.
+Running `redis_playground.py` twice returned counter values `1` and `2`.
