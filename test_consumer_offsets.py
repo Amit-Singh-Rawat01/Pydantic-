@@ -77,7 +77,7 @@ class ConsumerOffsetTests(unittest.TestCase):
             and isinstance(node.func, ast.Name)
         }
         self.assertIn("check_and_create_incident", guarded_calls)
-        self.assertIn("update_realtime_counters", guarded_calls)
+        self.assertIn("count_error", guarded_calls)
 
     def test_crash_hook_runs_after_database_commit_before_offset_commit(self):
         self.assertIn(
@@ -89,15 +89,17 @@ class ConsumerOffsetTests(unittest.TestCase):
         database_commit_position = self.source.index(
             "db.commit()", insert_position
         )
+        counter_position = self.source.index("count_error(")
         offset_commit_position = self.source.index(
             "committer.event_done()", crash_position
         )
 
         self.assertLess(insert_position, crash_position)
         self.assertLess(database_commit_position, crash_position)
+        self.assertGreater(counter_position, database_commit_position)
         self.assertLess(crash_position, offset_commit_position)
         self.assertLess(
-            self.source.index("update_realtime_counters(validated_event.service_name)"),
+            counter_position,
             crash_position,
         )
         self.assertIn("saved_this_run == CRASH_AFTER", self.source)

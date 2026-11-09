@@ -329,3 +329,92 @@ stop the backend, and the failed health check was printed in the backend log.
 The Redis command exercise returned `namaste`, counter values `1` and `2`,
 and `EXISTS errors:payment` returned `0` after the 60-second expiration.
 Running `redis_playground.py` twice returned counter values `1` and `2`.
+
+## Day 65: Redis per-service, per-minute error counters
+
+After a new error is committed to PostgreSQL, the consumer increments a Redis
+key for that service and the event's `occurred_at` minute, such as
+`errors:payment:2026-11-08T23:10`. New keys expire after two hours. Duplicate
+Kafka deliveries and rejected or failed database writes do not increment the
+counter. Redis has one-second connect and command timeouts; if a Redis counter
+operation fails, the consumer skips Redis attempts for ten seconds and keeps
+processing events. PostgreSQL remains the source of truth, and dashboard
+statistics continue to read from PostgreSQL.
+
+Check a counter:
+
+```text
+python -c "from redis_counters import count_error; count_error('payment', '2026-11-08T23:10:05')"
+docker compose exec redis redis-cli GET errors:payment:2026-11-08T23:10
+```
+
+Run `python redis_check.py` to sum all current `errors:*` keys by service and
+in total.
+
+For an isolated consistency check, first stop producers and let the consumer
+drain older events. Stop the consumer, clear Redis with
+`docker compose exec redis redis-cli FLUSHDB`, and record
+`GET /metrics/total-errors` as N0. Start the consumer and producers, then stop
+them and let the consumer drain before recording N1. The Redis total should
+match N1 - N0, except for events saved to PostgreSQL immediately before a
+consumer interruption. Check a sample key's `TTL`; it should be near 7200
+seconds.
+
+To check failure handling, keep the consumer and producers running, stop Redis
+for 30 seconds, and verify PostgreSQL totals continue to rise while the
+consumer logs at most one `Redis counter failed` line per ten seconds. Start
+Redis again and confirm that new counters resume; counters missed during the
+outage are not backfilled.
+
+Benchmark with `python load_test.py 10000 drain`, using the same event count,
+consumer settings, and service conditions for three runs before and three runs
+after enabling the counters. Record each run's consumer events/sec and compare
+the averages. The drain benchmark and outage/consistency checks have not yet
+been run against live services:
+
+| Measurement | Before Redis counters | After Redis counters |
+|---|---:|---:|
+| Three-run average consumer events/sec | Not measured | Not measured |
+| Change | — | Not measured |
+
+## Day 66: Redis total for `/stats` with PostgreSQL fallback
+
+`GET /stats` reads `total_errors` from Redis only after
+`total_errors_ready` confirms the total was seeded. If Redis is unavailable,
+either key is missing, or the total is invalid, `/stats` falls back to the
+PostgreSQL row count. `GET /metrics/total-errors` remains PostgreSQL-backed as
+the comparison/source-of-truth endpoint.
+
+The consumer increments the non-expiring `total_errors` key after each newly
+inserted PostgreSQL error. Before enabling the Redis read, stop the consumer
+and run `python seed_total.py` once to seed the existing table count and then
+mark the total ready. Stop the consumer before reseeding after a Redis data
+loss or outage; otherwise rows can be missed or counted twice.
+
+To compare `/stats` latency with the same table size, stop services and record
+the current row count and three `python read_test.py` averages before enabling
+the new read. Repeat after restarting the backend, then record the measured
+values here; these live service measurements have not been run as part of this
+change:
+
+| Measurement | Before Redis total (today) | After Redis total (today) |
+|---|---:|---:|
+| Error rows | Not measured | Not measured |
+| Three-run `read_test.py` average | Not measured | Not measured |
+| Average reduction | — | Not measured |
+
+For consistency, let the services run for two minutes, stop them, and let the
+consumer drain for 30 seconds. Compare `/stats` with
+`/metrics/total-errors`. To test the fallback, stop Redis and open `/stats`;
+the API should keep returning the PostgreSQL total and log
+`Redis read failed, Postgres se gin-ti karenge`. After restoring Redis, stop the
+consumer and run `python seed_total.py` to repair the total.
+
+To verify missing-data fallback without stopping Redis:
+
+```text
+docker compose exec redis redis-cli FLUSHDB
+```
+
+With the readiness marker gone, `/stats` should use PostgreSQL. Run
+`python seed_total.py` with the consumer stopped to restore the Redis fast path.

@@ -21,6 +21,7 @@ import models
 import schemas
 from redis.exceptions import RedisError
 from redis_client import redis_client
+from redis_counters import get_total_from_redis
 from producer import send_error_to_kafka
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -198,7 +199,9 @@ def get_error_stats(
 @app.get("/stats")
 def get_stats(db: Session = Depends(get_db)):
     resolve_stale_incidents(db)
-    total_errors = db.query(models.Error).count()
+    total_errors = get_total_from_redis()
+    if total_errors is None:
+        total_errors = db.query(models.Error).count()
 
     one_minute_ago = datetime.utcnow() - timedelta(minutes=1)
     errors_per_minute = (

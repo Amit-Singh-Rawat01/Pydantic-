@@ -6,7 +6,7 @@ import sys
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
 from pydantic import ValidationError
-from redis_client import redis_client
+from redis_counters import count_error
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import OperationalError
 
@@ -83,18 +83,6 @@ def save_rejected_event(raw_payload, reason):
 
     return False
 
-
-
-def update_realtime_counters(service_name):
-    redis_client.incr("errors:total")
-
-    minute_bucket = int(time.time() // 60)
-    minute_key = f"errors:minute:{minute_bucket}"
-
-    redis_client.incr(minute_key)
-    redis_client.expire(minute_key, 120)
-
-    redis_client.incr(f"errors:service:{service_name}")
 
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv(
@@ -217,9 +205,10 @@ while True:
                     raise
 
                 if insert_result.rowcount:
-                    update_realtime_counters(validated_event.service_name)
-
-                    print("Redis counters updated.")
+                    count_error(
+                        validated_event.service_name,
+                        validated_event.occurred_at,
+                    )
 
                     saved_this_run += 1
                     if CRASH_AFTER and saved_this_run == CRASH_AFTER:
