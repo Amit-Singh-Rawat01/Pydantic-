@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from database import (
     Base,
@@ -197,9 +197,13 @@ def get_error_stats(
 
 
 @app.get("/stats")
-def get_stats(db: Session = Depends(get_db)):
+def get_stats(
+    source: Literal["redis", "postgres"] = "redis",
+    db: Session = Depends(get_db),
+):
     resolve_stale_incidents(db)
-    total_errors = get_total_from_redis()
+    total_errors = get_total_from_redis() if source == "redis" else None
+    total_source = "redis" if total_errors is not None else "postgres"
     if total_errors is None:
         total_errors = db.query(models.Error).count()
 
@@ -234,6 +238,7 @@ def get_stats(db: Session = Depends(get_db)):
 
     return {
         "total_errors": total_errors,
+        "total_source": total_source,
         "errors_per_minute": errors_per_minute,
         "active_incidents": active_incidents,
         "system_health": system_health,

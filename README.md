@@ -418,3 +418,42 @@ docker compose exec redis redis-cli FLUSHDB
 
 With the readiness marker gone, `/stats` should use PostgreSQL. Run
 `python seed_total.py` with the consumer stopped to restore the Redis fast path.
+
+## Day 67: Compare Redis and PostgreSQL under load
+
+`GET /stats` defaults to the Redis total and reports its path in `total_source`.
+Use `GET /stats?source=postgres` to count the total directly in PostgreSQL
+without reading Redis. If Redis is missing or unavailable on the default route,
+the endpoint continues to fall back to PostgreSQL and reports that source.
+
+Run `python read_test.py redis` or `python read_test.py postgres` for 200
+sequential requests on one HTTP session, with a 20 ms pause between requests.
+The report includes the actual source for each response, average latency, p95,
+and slowest response. Stop the dashboard tab, other polling services, and
+`anomaly_watcher.py` before measuring.
+
+For the busy comparison, stop the consumer and use the Day 55/65 drain throughput
+to estimate a backlog lasting at least three minutes:
+`events = measured events/sec * 180`. Start the drain with
+`python load_test.py <events> drain`; when it prompts, start the consumer.
+Then run `redis`, `postgres`, `redis`, `postgres`, `redis`, `postgres` in that
+order. All six measurements must finish before the drain ends; otherwise repeat
+with a larger backlog. Record the measured events/sec, event count, and
+PostgreSQL error-table row count alongside the results.
+
+The measurements below have not been run against live services; values are left
+unfilled rather than guessed. The endpoint URLs for a live demo are
+`http://localhost:8000/stats?source=postgres` and `http://localhost:8000/stats`.
+
+| Haalat | Source | average | p95 | slowest |
+|---|---|---:|---:|---:|
+| Bina bheed | postgres | Not measured | Not measured | Not measured |
+| Bina bheed | redis | Not measured | Not measured | Not measured |
+| Bheed mein (drain) | postgres | Not measured | Not measured | Not measured |
+| Bheed mein (drain) | redis | Not measured | Not measured | Not measured |
+
+| Drain detail | Value |
+|---|---|
+| Consumer throughput (events/sec) | Not measured |
+| Queued events | Not measured |
+| PostgreSQL error-table rows | Not measured |
