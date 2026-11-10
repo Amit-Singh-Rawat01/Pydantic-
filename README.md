@@ -441,19 +441,24 @@ order. All six measurements must finish before the drain ends; otherwise repeat
 with a larger backlog. Record the measured events/sec, event count, and
 PostgreSQL error-table row count alongside the results.
 
-The measurements below have not been run against live services; values are left
-unfilled rather than guessed. The endpoint URLs for a live demo are
-`http://localhost:8000/stats?source=postgres` and `http://localhost:8000/stats`.
+Quiet baseline: one 200-request run per source. Busy results: three alternating
+200-request runs per source; average and p95 columns are means of the three
+run-level values, while slowest is the maximum across the three runs. All Redis
+runs reported `redis` for 200/200 responses, and all PostgreSQL runs reported
+`postgres` for 200/200 responses. The initial benchmark monitor timed out after
+queuing the events, but the consumer was restarted and all 5,940 test events
+were confirmed in PostgreSQL. At the final snapshot the overall Kafka consumer
+group still showed 47 messages of lag.
 
 | Haalat | Source | average | p95 | slowest |
 |---|---|---:|---:|---:|
-| Bina bheed | postgres | Not measured | Not measured | Not measured |
-| Bina bheed | redis | Not measured | Not measured | Not measured |
-| Bheed mein (drain) | postgres | Not measured | Not measured | Not measured |
-| Bheed mein (drain) | redis | Not measured | Not measured | Not measured |
+| Bina bheed | postgres | 21.9 ms | 24.5 ms | 36.4 ms |
+| Bina bheed | redis | 15.9 ms | 18.1 ms | 43.7 ms |
+| Bheed mein (drain) | postgres | 18.6 ms | 20.6 ms | 51.0 ms |
+| Bheed mein (drain) | redis | 12.6 ms | 14.4 ms | 35.2 ms |
 
 | Drain detail | Value |
 |---|---|
-| Consumer throughput (events/sec) | Not measured |
-| Queued events | Not measured |
-| PostgreSQL error-table rows | Not measured |
+| Pilot consumer throughput used for sizing | 33 events/sec |
+| Queued test events | 5,940 |
+| PostgreSQL error-table rows after drain | 57,317 (53,174 `load-test`) |
