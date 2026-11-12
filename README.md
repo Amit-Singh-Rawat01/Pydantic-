@@ -1,5 +1,13 @@
 # Error Intelligence Platform
 
+## Real-time: polling vs WebSocket
+
+- Polling baseline (Fetch/XHR over 60 seconds): not measured yet; record as `Polling: X requests/min per tab`.
+- `WS /ws/live` is one persistent connection and pushes one `total_errors` message each second.
+- The message reads only the Redis counter; if Redis is unavailable, `total_errors` is `null` and `total_source` is `unavailable`.
+- REST endpoints remain responsible for the dashboard's other, heavier statistics and data.
+- `GET /health` includes `ws_clients`, the number of currently connected WebSocket clients.
+
 ## Root cause heuristic (cross-service correlation)
 
 `GET /incident-correlation` checks open anomaly incidents. If multiple
