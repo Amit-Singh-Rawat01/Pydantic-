@@ -1,4 +1,5 @@
 import useAutoRefresh from "../hooks/useAutoRefresh";
+import { useLiveTotal } from "../hooks/useLiveTotal";
 
 interface Stats {
   total_errors: number;
@@ -22,11 +23,14 @@ function StatsCards() {
     fetchStats,
     5000
   );
+  const { total: liveTotal, connected } = useLiveTotal();
 
   if (loading) return <p className="p-6 text-sm text-gray-400">Stats loading...</p>;
   if (error) return <p className="p-6 text-sm text-red-500">⚠ Stats could not be loaded</p>;
   if (!stats) return null;
 
+  const totalErrors =
+    connected && liveTotal !== null ? liveTotal : stats.total_errors;
   const healthColor =
     stats.system_health === "HEALTHY"
       ? "bg-green-50 text-green-700 border-green-200"
@@ -37,8 +41,19 @@ function StatsCards() {
   return (
     <div className="grid grid-cols-2 gap-4 p-6 pb-0 md:grid-cols-4">
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-700">
-        <p className="text-sm font-medium">Total Errors</p>
-        <p className="mt-1 text-2xl font-bold">{stats.total_errors}</p>
+        <p className="text-sm font-medium">
+          Total Errors
+          <span
+            className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
+              connected
+                ? "bg-green-100 text-green-700"
+                : "bg-yellow-100 text-yellow-700"
+            }`}
+          >
+            {connected ? "● LIVE" : "Reconnecting…"}
+          </span>
+        </p>
+        <p className="mt-1 text-2xl font-bold">{totalErrors}</p>
       </div>
       <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-yellow-700">
         <p className="text-sm font-medium">Errors / Min</p>
