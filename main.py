@@ -12,6 +12,7 @@ from database import (
     ensure_incident_status_column,
     ensure_anomaly_incident_top_error_column,
     get_db,
+    SessionLocal,
 )
 from fastapi import (
     Depends,
@@ -52,7 +53,6 @@ ensure_anomaly_incident_top_error_column()
 
 
 app = FastAPI(title="Error Intelligence Platform")
-hub = LiveHub(read_total=get_total_from_redis)
 
 app.add_middleware(
     CORSMiddleware,
@@ -223,6 +223,13 @@ def get_stats(
     source: Literal["redis", "postgres"] = "redis",
     db: Session = Depends(get_db),
 ):
+    return build_stats(db, source)
+
+
+def build_stats(
+    db: Session,
+    source: Literal["redis", "postgres"] = "redis",
+):
     resolve_stale_incidents(db)
     total_errors = get_total_from_redis() if source == "redis" else None
     total_source = "redis" if total_errors is not None else "postgres"
@@ -265,6 +272,17 @@ def get_stats(
         "active_incidents": active_incidents,
         "system_health": system_health,
     }
+
+
+def read_stats():
+    db = SessionLocal()
+    try:
+        return build_stats(db)
+    finally:
+        db.close()
+
+
+hub = LiveHub(read_snapshot=read_stats, every_sec=1)
 
 
 @app.get("/stats/by-service")

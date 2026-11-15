@@ -1,15 +1,16 @@
 import asyncio
-from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import WebSocket
+from fastapi.encoders import jsonable_encoder
 
 
 class LiveHub:
-    """Read the total once per tick and broadcast it to every client."""
+    """Read one snapshot per tick and broadcast it to every client."""
 
-    def __init__(self, read_total: Callable[[], Optional[int]]):
-        self.read_total = read_total
+    def __init__(self, read_snapshot: Callable[[], Dict[str, Any]], every_sec: float = 1):
+        self.read_snapshot = read_snapshot
+        self.every_sec = every_sec
         self.clients: List[WebSocket] = []
         self._task: Optional[asyncio.Task] = None
 
@@ -26,19 +27,14 @@ class LiveHub:
     async def _loop(self):
         while self.clients:
             try:
-                total = await asyncio.to_thread(self.read_total)
+                snapshot = await asyncio.to_thread(self.read_snapshot)
+                snapshot = jsonable_encoder(snapshot)
             except Exception as error:
-                print(f"[hub] total padhne mein error: {error}")
-                total = None
+                print(f"[hub] snapshot padhne mein error: {error}")
+                snapshot = {"total_errors": None}
 
-            await self._broadcast(
-                {
-                    "total_errors": total,
-                    "total_source": "redis" if total is not None else "unavailable",
-                    "sent_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-            await asyncio.sleep(1)
+            await self._broadcast(snapshot)
+            await asyncio.sleep(self.every_sec)
 
     async def _broadcast(self, message: Dict[str, Any]):
         dead: List[WebSocket] = []

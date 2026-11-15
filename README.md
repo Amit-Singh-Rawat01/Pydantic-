@@ -3,8 +3,8 @@
 ## Real-time: polling vs WebSocket
 
 - Polling baseline (Fetch/XHR over 60 seconds): not measured yet; record as `Polling: X requests/min per tab`.
-- `WS /ws/live` is one persistent connection and pushes one `total_errors` message each second.
-- The message reads only the Redis counter; if Redis is unavailable, `total_errors` is `null` and `total_source` is `unavailable`.
+- `WS /ws/live` is one persistent connection and pushes the full `/stats` snapshot once each second. `total_errors` remains in its existing position for older dashboard clients.
+- `total_errors` comes from Redis when available and falls back to Postgres. If the snapshot cannot be read, the hub logs the error and sends `{"total_errors": null}`.
 - The dashboard's Total Errors card uses this WebSocket; its other cards and charts continue polling REST endpoints every five seconds.
 - If the WebSocket is disconnected or has no usable total yet, the Total Errors card falls back to the polled `/stats` value; its badge reflects the connection state.
 - `GET /health` includes `ws_clients`, the number of currently connected WebSocket clients.
@@ -16,6 +16,21 @@
   | 20 | Not measured in this session | Not measured in this session |
 
 - Server har second total ek baar padhta hai aur sab dashboards ko broadcast karta hai, isliye tabs badhne par Redis ka load nahi badhta.
+- `WS /ws/live` now broadcasts the same full stats snapshot returned by `GET /stats`; the existing `total_errors` key is preserved. REST and WebSocket both use `build_stats`.
+- `/stats` timing (`python stats_timing.py`, 30 requests): average 25 ms, p95 47 ms, max 56 ms. Since p95 is under 200 ms, the hub uses `every_sec=1`.
+- WebSocket message ka shape `/stats` jaisa hi hai: ek shape, do raaste.
+
+Real WebSocket snapshot:
+
+```json
+{
+  "total_errors": 57317,
+  "total_source": "redis",
+  "errors_per_minute": 0,
+  "active_incidents": 0,
+  "system_health": "HEALTHY"
+}
+```
 
 ## Root cause heuristic (cross-service correlation)
 
