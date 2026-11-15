@@ -19,52 +19,32 @@ with (
 
 
 class FakeWebSocket:
-    def __init__(self):
-        self.accepted = False
-        self.messages = []
-        self.clients_when_sent = None
-
-    async def accept(self):
-        self.accepted = True
-
-    async def send_json(self, message):
-        self.messages.append(message)
-        self.clients_when_sent = main.health_check()["ws_clients"]
+    async def receive_text(self):
         raise WebSocketDisconnect(code=1000)
 
 
 class LiveWebSocketTests(unittest.TestCase):
-    def _run_endpoint(self, total):
-        main.ws_clients = 0
+    def test_endpoint_connects_and_disconnects_from_hub(self):
         websocket = FakeWebSocket()
         with (
-            patch.object(
-                main.asyncio, "to_thread", new=AsyncMock(return_value=total)
-            ) as to_thread,
-            patch.object(main.asyncio, "sleep", new=AsyncMock()),
-            patch.object(main.redis_client, "ping"),
+            patch.object(main.hub, "connect", new=AsyncMock()) as connect,
+            patch.object(main.hub, "disconnect") as disconnect,
         ):
             asyncio.run(main.ws_live(websocket))
 
-        self.assertTrue(websocket.accepted)
-        self.assertEqual(len(websocket.messages), 1)
-        self.assertEqual(websocket.clients_when_sent, 1)
-        self.assertEqual(main.ws_clients, 0)
-        to_thread.assert_awaited_once_with(main.get_total_from_redis)
-        return websocket.messages[0]
+        connect.assert_awaited_once_with(websocket)
+        disconnect.assert_called_once_with(websocket)
 
-    def test_sends_redis_total_and_tracks_connected_client(self):
-        message = self._run_endpoint(total=23)
+    def test_health_reports_hub_client_count(self):
+        clients = main.hub.clients
+        main.hub.clients = [object(), object()]
+        try:
+            with patch.object(main.redis_client, "ping"):
+                result = main.health_check()
+        finally:
+            main.hub.clients = clients
 
-        self.assertEqual(message["total_errors"], 23)
-        self.assertEqual(message["total_source"], "redis")
-        self.assertTrue(message["sent_at"])
-
-    def test_unavailable_redis_total_is_sent_as_null(self):
-        message = self._run_endpoint(total=None)
-
-        self.assertIsNone(message["total_errors"])
-        self.assertEqual(message["total_source"], "unavailable")
+        self.assertEqual(result["ws_clients"], 2)
 
 
 if __name__ == "__main__":

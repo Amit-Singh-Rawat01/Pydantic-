@@ -8,6 +8,14 @@
 - The dashboard's Total Errors card uses this WebSocket; its other cards and charts continue polling REST endpoints every five seconds.
 - If the WebSocket is disconnected or has no usable total yet, the Total Errors card falls back to the polled `/stats` value; its badge reflects the connection state.
 - `GET /health` includes `ws_clients`, the number of currently connected WebSocket clients.
+- `python ws_load.py 1` and `python ws_load.py 20` measure Redis commands/sec and aggregate WebSocket messages/sec. Record the results here:
+
+  | Clients | Redis commands/sec (before) | Redis commands/sec (after) |
+  | --- | ---: | ---: |
+  | 1 | Not measured in this session | Not measured in this session |
+  | 20 | Not measured in this session | Not measured in this session |
+
+- Server har second total ek baar padhta hai aur sab dashboards ko broadcast karta hai, isliye tabs badhne par Redis ka load nahi badhta.
 
 ## Root cause heuristic (cross-service correlation)
 

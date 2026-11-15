@@ -1,4 +1,3 @@
-import asyncio
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
@@ -22,6 +21,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
+from live_hub import LiveHub
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -52,7 +52,7 @@ ensure_anomaly_incident_top_error_column()
 
 
 app = FastAPI(title="Error Intelligence Platform")
-ws_clients = 0
+hub = LiveHub(read_total=get_total_from_redis)
 
 app.add_middleware(
     CORSMiddleware,
@@ -78,31 +78,21 @@ def health_check():
     return {
         "status": "ok",
         "redis": redis_status,
-        "ws_clients": ws_clients,
+        "ws_clients": len(hub.clients),
         "timestamp": datetime.utcnow().isoformat(),
     }
 
 
 @app.websocket("/ws/live")
-async def ws_live(websocket: WebSocket):
-    global ws_clients
-    await websocket.accept()
-    ws_clients += 1
+async def ws_live(ws: WebSocket):
+    await hub.connect(ws)
     try:
         while True:
-            total = await asyncio.to_thread(get_total_from_redis)
-            await websocket.send_json(
-                {
-                    "total_errors": total,
-                    "total_source": "redis" if total is not None else "unavailable",
-                    "sent_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-            await asyncio.sleep(1)
+            await ws.receive_text()
     except WebSocketDisconnect:
         pass
     finally:
-        ws_clients -= 1
+        hub.disconnect(ws)
 
 
 @app.post("/errors")
