@@ -1,5 +1,5 @@
 import useAutoRefresh from "../hooks/useAutoRefresh";
-import { useLiveTotal } from "../hooks/useLiveTotal";
+import { useLiveStats } from "../hooks/useLiveStats";
 
 interface Stats {
   total_errors: number;
@@ -19,55 +19,63 @@ const fetchStats = async (): Promise<Stats> => {
 };
 
 function StatsCards() {
-  const { data: stats, loading, error } = useAutoRefresh<Stats>(
+  const { stats: live, connected } = useLiveStats<Stats>();
+  const polled = useAutoRefresh<Stats>(
     fetchStats,
-    5000
+    5000,
+    !connected
   );
-  const { total: liveTotal, connected } = useLiveTotal();
 
-  if (loading) return <p className="p-6 text-sm text-gray-400">Stats loading...</p>;
-  if (error) return <p className="p-6 text-sm text-red-500">⚠ Stats could not be loaded</p>;
-  if (!stats) return null;
+  const isLive = connected && live !== null;
+  const stats = isLive ? live : polled.data;
+  const loading = isLive ? false : polled.loading;
+  const error = isLive ? null : polled.error;
 
-  const totalErrors =
-    connected && liveTotal !== null ? liveTotal : stats.total_errors;
   const healthColor =
-    stats.system_health === "HEALTHY"
+    stats?.system_health === "HEALTHY"
       ? "bg-green-50 text-green-700 border-green-200"
-      : stats.system_health === "WARNING"
+      : stats?.system_health === "WARNING"
         ? "bg-yellow-50 text-yellow-700 border-yellow-200"
         : "bg-red-50 text-red-700 border-red-200";
 
   return (
-    <div className="grid grid-cols-2 gap-4 p-6 pb-0 md:grid-cols-4">
-      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-700">
-        <p className="text-sm font-medium">
-          Total Errors
-          <span
-            className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
-              connected
-                ? "bg-green-100 text-green-700"
-                : "bg-yellow-100 text-yellow-700"
-            }`}
-          >
-            {connected ? "● LIVE" : "Reconnecting…"}
-          </span>
-        </p>
-        <p className="mt-1 text-2xl font-bold">{totalErrors}</p>
+    <>
+      <div className="px-6 pt-6">
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+            connected
+              ? "bg-green-100 text-green-700"
+              : "bg-yellow-100 text-yellow-700"
+          }`}
+        >
+          {connected ? "● LIVE" : "Reconnecting…"}
+        </span>
       </div>
-      <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-yellow-700">
-        <p className="text-sm font-medium">Errors / Min</p>
-        <p className="mt-1 text-2xl font-bold">{stats.errors_per_minute}</p>
-      </div>
-      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
-        <p className="text-sm font-medium">Active Incidents</p>
-        <p className="mt-1 text-2xl font-bold">{stats.active_incidents}</p>
-      </div>
-      <div className={`rounded-lg border p-4 ${healthColor}`}>
-        <p className="text-sm font-medium">System Health</p>
-        <p className="mt-1 text-2xl font-bold">{stats.system_health}</p>
-      </div>
-    </div>
+      {loading ? (
+        <p className="p-6 text-sm text-gray-400">Stats loading...</p>
+      ) : error ? (
+        <p className="p-6 text-sm text-red-500">⚠ Stats could not be loaded</p>
+      ) : !stats ? null : (
+        <div className="grid grid-cols-2 gap-4 p-6 pt-3 pb-0 md:grid-cols-4">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-700">
+            <p className="text-sm font-medium">Total Errors</p>
+            <p className="mt-1 text-2xl font-bold">{stats.total_errors}</p>
+          </div>
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-yellow-700">
+            <p className="text-sm font-medium">Errors / Min</p>
+            <p className="mt-1 text-2xl font-bold">{stats.errors_per_minute}</p>
+          </div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+            <p className="text-sm font-medium">Active Incidents</p>
+            <p className="mt-1 text-2xl font-bold">{stats.active_incidents}</p>
+          </div>
+          <div className={`rounded-lg border p-4 ${healthColor}`}>
+            <p className="text-sm font-medium">System Health</p>
+            <p className="mt-1 text-2xl font-bold">{stats.system_health}</p>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 
 function useAutoRefresh<T>(
   fetchFn: () => Promise<T>,
-  intervalMs: number = 5000
+  intervalMs: number = 5000,
+  enabled: boolean = true
 ) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
@@ -15,6 +16,8 @@ function useAutoRefresh<T>(
   }, [fetchFn]);
 
   useEffect(() => {
+    if (!enabled) return;
+
     let isMounted = true;
 
     const load = async () => {
@@ -44,7 +47,7 @@ function useAutoRefresh<T>(
       isMounted = false;
       clearInterval(interval);
     };
-  }, [intervalMs]);
+  }, [intervalMs, enabled]);
 
   return { data, loading, error };
 }

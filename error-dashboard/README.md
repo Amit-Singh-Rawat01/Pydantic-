@@ -1,5 +1,7 @@
 # React + TypeScript + Vite
 
+Dashboard tab, `/stats` requests/min: BEFORE 12 (5-second polling interval; expected), AFTER 0 (measured over 60 seconds, WebSocket LIVE).
+
 ## Service health
 
 The dashboard polls `GET /metrics/anomaly-score` every five seconds for live per-service status; anomaly events remain a separate history endpoint.
