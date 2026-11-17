@@ -1,3 +1,4 @@
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
@@ -79,6 +80,7 @@ def health_check():
         "status": "ok",
         "redis": redis_status,
         "ws_clients": len(hub.clients),
+        "hub_last_ok_age_s": round(time.monotonic() - hub.last_ok, 1),
         "timestamp": datetime.utcnow().isoformat(),
     }
 

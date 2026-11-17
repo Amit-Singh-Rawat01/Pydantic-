@@ -1,8 +1,12 @@
 import asyncio
+import logging
+import time
 from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
+
+logger = logging.getLogger(__name__)
 
 
 class LiveHub:
@@ -13,6 +17,8 @@ class LiveHub:
         self.every_sec = every_sec
         self.clients: List[WebSocket] = []
         self._task: Optional[asyncio.Task] = None
+        self.last_ok = time.monotonic()
+        self.fail_streak = 0
 
     async def connect(self, ws: WebSocket):
         await ws.accept()
@@ -29,11 +35,19 @@ class LiveHub:
             try:
                 snapshot = await asyncio.to_thread(self.read_snapshot)
                 snapshot = jsonable_encoder(snapshot)
-            except Exception as error:
-                print(f"[hub] snapshot padhne mein error: {error}")
-                snapshot = {"total_errors": None}
-
-            await self._broadcast(snapshot)
+                await self._broadcast(snapshot)
+                if self.fail_streak:
+                    logger.warning(
+                        "hub recovered after %d failed cycles", self.fail_streak
+                    )
+                self.fail_streak = 0
+                self.last_ok = time.monotonic()
+            except Exception:
+                self.fail_streak += 1
+                if self.fail_streak == 1 or self.fail_streak % 10 == 0:
+                    logger.exception(
+                        "hub cycle failed (%d in a row)", self.fail_streak
+                    )
             await asyncio.sleep(self.every_sec)
 
     async def _broadcast(self, message: Dict[str, Any]):
@@ -41,8 +55,8 @@ class LiveHub:
         for ws in list(self.clients):
             try:
                 await ws.send_json(message)
-            except Exception as error:
-                print(f"[hub] client hataya: {type(error).__name__}")
+            except Exception:
+                logger.exception("hub client send failed; removing client")
                 dead.append(ws)
         for ws in dead:
             self.disconnect(ws)

@@ -19,7 +19,7 @@ const fetchStats = async (): Promise<Stats> => {
 };
 
 function StatsCards() {
-  const { stats: live, connected } = useLiveStats<Stats>();
+  const { stats: live, connected, silentFor } = useLiveStats<Stats>();
   const polled = useAutoRefresh<Stats>(
     fetchStats,
     5000,
@@ -30,6 +30,11 @@ function StatsCards() {
   const stats = isLive ? live : polled.data;
   const loading = isLive ? false : polled.loading;
   const error = isLive ? null : polled.error;
+  const badge = !connected
+    ? { text: "Reconnecting…", cls: "bg-amber-100 text-amber-700" }
+    : silentFor > 0
+      ? { text: `STALE · ${silentFor}s`, cls: "bg-red-100 text-red-700" }
+      : { text: "LIVE", cls: "bg-green-100 text-green-700" };
 
   const healthColor =
     stats?.system_health === "HEALTHY"
@@ -42,13 +47,9 @@ function StatsCards() {
     <>
       <div className="px-6 pt-6">
         <span
-          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-            connected
-              ? "bg-green-100 text-green-700"
-              : "bg-yellow-100 text-yellow-700"
-          }`}
+          className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.cls}`}
         >
-          {connected ? "● LIVE" : "Reconnecting…"}
+          {badge.text}
         </span>
       </div>
       {loading ? (
@@ -56,7 +57,11 @@ function StatsCards() {
       ) : error ? (
         <p className="p-6 text-sm text-red-500">⚠ Stats could not be loaded</p>
       ) : !stats ? null : (
-        <div className="grid grid-cols-2 gap-4 p-6 pt-3 pb-0 md:grid-cols-4">
+        <div
+          className={`grid grid-cols-2 gap-4 p-6 pt-3 pb-0 transition-opacity md:grid-cols-4 ${
+            silentFor > 0 ? "opacity-60" : ""
+          }`}
+        >
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-700">
             <p className="text-sm font-medium">Total Errors</p>
             <p className="mt-1 text-2xl font-bold">{stats.total_errors}</p>

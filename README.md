@@ -4,10 +4,11 @@
 
 - Polling baseline (Fetch/XHR over 60 seconds): not measured yet; record as `Polling: X requests/min per tab`.
 - `WS /ws/live` is one persistent connection and pushes the full `/stats` snapshot once each second. `total_errors` remains in its existing position for older dashboard clients.
-- `total_errors` comes from Redis when available and falls back to Postgres. If the snapshot cannot be read, the hub logs the error and sends `{"total_errors": null}`.
-- The dashboard's Total Errors card uses this WebSocket; its other cards and charts continue polling REST endpoints every five seconds.
-- If the WebSocket is disconnected or has no usable total yet, the Total Errors card falls back to the polled `/stats` value; its badge reflects the connection state.
-- `GET /health` includes `ws_clients`, the number of currently connected WebSocket clients.
+- `total_errors` comes from Redis when available and falls back to Postgres. If the snapshot cannot be read, the hub logs the failed cycle and retries on its next tick instead of sending a fake snapshot.
+- The dashboard's stats cards use this WebSocket; charts and tables continue polling REST endpoints every five seconds.
+- If the WebSocket is disconnected or has no usable stats yet, the cards fall back to the polled `/stats` value. An open connection with no message for more than three seconds is marked `STALE · Ns`, and the stats cards are dimmed; a disconnected connection is marked `Reconnecting…`.
+- `GET /health` includes `ws_clients`, the number of currently connected WebSocket clients, and `hub_last_ok_age_s`, the seconds since the last successful hub cycle.
+- The hub retries failed cycles without restarting, logs the first failure and every tenth consecutive failure, and logs when it recovers. No polling fallback is added for a connected-but-stale WebSocket; charts and tables continue their existing polling behavior.
 - `python ws_load.py 1` and `python ws_load.py 20` measure Redis commands/sec and aggregate WebSocket messages/sec. Record the results here:
 
   | Clients | Redis commands/sec (before) | Redis commands/sec (after) |

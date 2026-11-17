@@ -39,12 +39,17 @@ class LiveWebSocketTests(unittest.TestCase):
         clients = main.hub.clients
         main.hub.clients = [object(), object()]
         try:
-            with patch.object(main.redis_client, "ping"):
+            with (
+                patch.object(main.redis_client, "ping"),
+                patch("main.time.monotonic", return_value=123.45),
+            ):
+                main.hub.last_ok = 120.0
                 result = main.health_check()
         finally:
             main.hub.clients = clients
 
         self.assertEqual(result["ws_clients"], 2)
+        self.assertEqual(result["hub_last_ok_age_s"], 3.5)
 
 
 if __name__ == "__main__":
