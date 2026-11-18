@@ -21,11 +21,17 @@ Day 74 measurements (run against the live stack):
 
 | Check | Result |
 | --- | --- |
-| Successful hub cycles in one minute | Not measured yet |
-| Failed cycles during 30 seconds with Postgres stopped | Not measured yet |
-| Hub failure log lines during that test | Not measured yet |
-| `ws_clients` with three dashboard tabs | Not measured yet |
-| Backend scrape `up=0` detection time | Not measured yet |
+| Successful hub cycles in one minute | 60.02 |
+| Failed cycles during 30 seconds with Postgres stopped | 4 (Prometheus `increase` was 4.02) |
+| Hub failure log lines during that test | 1 |
+| Hub recovery after Postgres became ready | 0.82 s |
+| `ws_clients` with three dashboard tabs (then one) | 3 (then 1) |
+| Backend scrape `up=0` detection time | 7.67 s |
+
+During the Postgres outage the hub completed four failed cycles, not thirty:
+the stopped database caused hostname-resolution errors that delayed each
+snapshot attempt. The age gauge reached about 31 seconds, and the hub recovered
+without a backend restart once Postgres was ready.
 
 ## Real-time: polling vs WebSocket
 
