@@ -51,6 +51,22 @@ class LiveWebSocketTests(unittest.TestCase):
         self.assertEqual(result["ws_clients"], 2)
         self.assertEqual(result["hub_last_ok_age_s"], 3.5)
 
+    def test_metrics_exposes_prometheus_text_with_live_gauges_and_counters(self):
+        clients = main.hub.clients
+        main.hub.clients = [object(), object()]
+        try:
+            with patch("main.time.monotonic", return_value=123.45):
+                result = asyncio.run(main.metrics())
+        finally:
+            main.hub.clients = clients
+
+        body = result.body.decode()
+        self.assertTrue(result.media_type.startswith("text/plain"))
+        self.assertIn("ws_clients 2.0", body)
+        self.assertRegex(body, r"hub_last_ok_age_seconds 3\.45\d*")
+        self.assertIn('hub_cycles_total{result="ok"}', body)
+        self.assertIn('hub_cycles_total{result="fail"}', body)
+
 
 if __name__ == "__main__":
     unittest.main()

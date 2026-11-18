@@ -5,8 +5,13 @@ from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
+from prometheus_client import Counter
 
 logger = logging.getLogger(__name__)
+
+hub_cycles = Counter("hub_cycles", "Hub broadcast cycles", ["result"])
+hub_cycles.labels(result="ok")
+hub_cycles.labels(result="fail")
 
 
 class LiveHub:
@@ -42,8 +47,10 @@ class LiveHub:
                     )
                 self.fail_streak = 0
                 self.last_ok = time.monotonic()
+                hub_cycles.labels(result="ok").inc()
             except Exception:
                 self.fail_streak += 1
+                hub_cycles.labels(result="fail").inc()
                 if self.fail_streak == 1 or self.fail_streak % 10 == 0:
                     logger.exception(
                         "hub cycle failed (%d in a row)", self.fail_streak

@@ -4,6 +4,11 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, call, patch
 
 from live_hub import LiveHub
+from prometheus_client import REGISTRY
+
+
+def cycle_count(result):
+    return REGISTRY.get_sample_value("hub_cycles_total", {"result": result})
 
 
 class FakeWebSocket:
@@ -29,6 +34,7 @@ class LiveHubTests(unittest.TestCase):
         }
         hub = LiveHub(read_snapshot=lambda: snapshot, every_sec=2)
         hub.clients.extend([first, second])
+        successful_cycles_before = cycle_count("ok")
 
         async def run_one_tick():
             async def stop_after_tick(_delay):
@@ -58,11 +64,13 @@ class LiveHubTests(unittest.TestCase):
             first.messages[0]["updated_at"],
             "2026-11-15T00:00:00+00:00",
         )
+        self.assertEqual(cycle_count("ok"), successful_cycles_before + 1)
 
     def test_snapshot_failure_is_logged_without_broadcasting_a_fake_snapshot(self):
         client = FakeWebSocket()
         hub = LiveHub(read_snapshot=lambda: {"total_errors": 23})
         hub.clients.append(client)
+        failed_cycles_before = cycle_count("fail")
 
         async def run_one_tick():
             async def stop_after_tick(_delay):
@@ -87,12 +95,15 @@ class LiveHubTests(unittest.TestCase):
 
         self.assertEqual(client.messages, [])
         self.assertEqual(hub.fail_streak, 1)
+        self.assertEqual(cycle_count("fail"), failed_cycles_before + 1)
 
     def test_loop_recovers_after_a_failed_cycle(self):
         client = FakeWebSocket()
         snapshot = {"total_errors": 23}
         hub = LiveHub(read_snapshot=lambda: snapshot)
         hub.clients.append(client)
+        successful_cycles_before = cycle_count("ok")
+        failed_cycles_before = cycle_count("fail")
 
         async def run_two_ticks():
             async def stop_after_second_tick(_delay):
@@ -126,10 +137,13 @@ class LiveHubTests(unittest.TestCase):
         self.assertEqual(client.messages, [snapshot])
         self.assertEqual(hub.fail_streak, 0)
         self.assertEqual(hub.last_ok, 15.0)
+        self.assertEqual(cycle_count("ok"), successful_cycles_before + 1)
+        self.assertEqual(cycle_count("fail"), failed_cycles_before + 1)
 
     def test_repeated_failures_are_logged_on_first_and_tenth_cycles(self):
         hub = LiveHub(read_snapshot=lambda: {"total_errors": 23})
         hub.clients.append(FakeWebSocket())
+        failed_cycles_before = cycle_count("fail")
 
         async def run_ten_failed_ticks():
             async def stop_after_tenth_tick(_delay):
@@ -164,6 +178,7 @@ class LiveHubTests(unittest.TestCase):
         asyncio.run(run_ten_failed_ticks())
 
         self.assertEqual(hub.fail_streak, 10)
+        self.assertEqual(cycle_count("fail"), failed_cycles_before + 10)
 
     def test_connect_starts_loop_and_disconnect_removes_client(self):
         client = FakeWebSocket()

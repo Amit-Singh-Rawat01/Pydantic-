@@ -1,5 +1,32 @@
 # Error Intelligence Platform
 
+## Day 74: Prometheus monitoring
+
+Prometheus pulls `/metrics` every five seconds. The backend exports the current
+`ws_clients` and `hub_last_ok_age_seconds` gauges, plus `hub_cycles_total`
+counters labeled by `result="ok"` or `result="fail"`. Prometheus is available
+at `http://localhost:9090`; check `/targets` to confirm both scrape jobs are UP.
+
+Useful PromQL:
+
+```promql
+increase(hub_cycles_total{result="ok"}[1m])
+increase(hub_cycles_total{result="fail"}[10m])
+hub_last_ok_age_seconds
+ws_clients
+up{job="backend"}
+```
+
+Day 74 measurements (run against the live stack):
+
+| Check | Result |
+| --- | --- |
+| Successful hub cycles in one minute | Not measured yet |
+| Failed cycles during 30 seconds with Postgres stopped | Not measured yet |
+| Hub failure log lines during that test | Not measured yet |
+| `ws_clients` with three dashboard tabs | Not measured yet |
+| Backend scrape `up=0` detection time | Not measured yet |
+
 ## Real-time: polling vs WebSocket
 
 - Polling baseline (Fetch/XHR over 60 seconds): not measured yet; record as `Polling: X requests/min per tab`.

@@ -20,10 +20,12 @@ from fastapi import (
     FastAPI,
     HTTPException,
     Query,
+    Response,
     WebSocket,
     WebSocketDisconnect,
 )
 from live_hub import LiveHub
+from prometheus_client import CONTENT_TYPE_LATEST, Gauge, generate_latest
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -285,6 +287,19 @@ def read_stats():
 
 
 hub = LiveHub(read_snapshot=read_stats, every_sec=1)
+ws_clients_gauge = Gauge(
+    "ws_clients", "Connected dashboard WebSocket clients"
+)
+ws_clients_gauge.set_function(lambda: len(hub.clients))
+hub_age_gauge = Gauge(
+    "hub_last_ok_age_seconds", "Seconds since the hub last broadcast OK"
+)
+hub_age_gauge.set_function(lambda: time.monotonic() - hub.last_ok)
+
+
+@app.get("/metrics")
+async def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/stats/by-service")
