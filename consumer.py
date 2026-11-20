@@ -2,10 +2,13 @@ import json
 import logging
 import os
 import sys
+import threading
+import time
 
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
 from pydantic import ValidationError
+from prometheus_client import Counter, Gauge, start_http_server
 from redis_counters import count_error
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import OperationalError
@@ -15,13 +18,50 @@ import models
 from schemas import ErrorEventSchema
 from fingerprint import generate_fingerprint
 
-import time
 from incident_detector import check_and_create_incident
 
 
 MAX_PAYLOAD_LENGTH = 2000
 MAX_REASON_LENGTH = 500
 CRASH_AFTER = int(sys.argv[1]) if len(sys.argv) > 1 else 0
+
+EVENTS = Counter(
+    "consumer_events_total",
+    "Consumer events by processing result",
+    ["result"],
+)
+LAG = Gauge(
+    "consumer_lag",
+    "Kafka events queued but not yet fetched by this consumer",
+)
+
+for result in ("saved", "duplicate", "rejected", "db_error"):
+    EVENTS.labels(result=result)
+
+
+def update_lag(consumer):
+    try:
+        partitions = list(consumer.assignment())
+        if not partitions:
+            return
+        end_offsets = consumer.end_offsets(partitions)
+        lag = sum(
+            end_offsets[partition] - consumer.position(partition)
+            for partition in partitions
+        )
+        LAG.set(max(lag, 0))
+    except Exception as error:
+        print(f"lag naapna fail: {error}")
+
+
+def run_lag_updates(consumer):
+    last_lag = 0.0
+    while not getattr(consumer, "closed", False):
+        now = time.time()
+        if now - last_lag >= 5:
+            update_lag(consumer)
+            last_lag = now
+        time.sleep(1)
 
 
 class BatchCommitter:
@@ -115,9 +155,18 @@ def create_consumer_with_retry():
             wait = min(wait * 2, 30)
 
 
+start_http_server(8001)
+
 while True:
     consumer = create_consumer_with_retry()
     committer = BatchCommitter(consumer)
+    lag_thread = threading.Thread(
+        target=run_lag_updates,
+        args=(consumer,),
+        daemon=True,
+        name="consumer-lag",
+    )
+    lag_thread.start()
 
     print(
         f"Consumer started. Kafka: {KAFKA_BOOTSTRAP_SERVERS}"
@@ -187,6 +236,8 @@ while True:
                         )
 
                     db.commit()
+                    if not insert_result.rowcount:
+                        EVENTS.labels(result="duplicate").inc()
                 except OperationalError as e:
                     print(
                         f"[DB WRITE FAILED] Database unreachable — "
@@ -194,6 +245,7 @@ while True:
                     )
                     if db:
                         db.rollback()
+                    EVENTS.labels(result="db_error").inc()
                     raise
                 except Exception as e:
                     print(
@@ -202,6 +254,7 @@ while True:
                     )
                     if db:
                         db.rollback()
+                    EVENTS.labels(result="db_error").inc()
                     raise
 
                 if insert_result.rowcount:
@@ -211,6 +264,7 @@ while True:
                     )
 
                     saved_this_run += 1
+                    EVENTS.labels(result="saved").inc()
                     if CRASH_AFTER and saved_this_run == CRASH_AFTER:
                         print(
                             f"[CRASH] event #{saved_this_run} save hua, commit nahi hua",
@@ -235,6 +289,7 @@ while True:
                     raise RuntimeError(
                         "Rejected event could not be persisted; offset not committed"
                     )
+                EVENTS.labels(result="rejected").inc()
                 committer.event_done()
 
             except Exception as e:

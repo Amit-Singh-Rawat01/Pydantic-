@@ -1,5 +1,36 @@
 # Error Intelligence Platform
 
+## Day 75: Consumer metrics
+
+The consumer exports labelled Prometheus metrics on port `8001`:
+
+```text
+consumer_events_total{result="saved"}
+consumer_events_total{result="duplicate"}
+consumer_events_total{result="rejected"}
+consumer_events_total{result="db_error"}
+consumer_lag
+```
+
+Useful PromQL:
+
+```promql
+rate(consumer_events_total{result="saved"}[1m])
+consumer_lag
+increase(consumer_events_total{result="duplicate"}[10m])
+increase(consumer_events_total{result="rejected"}[10m])
+increase(consumer_events_total{result="db_error"}[10m])
+up{job="consumer"}
+```
+
+Day 75 measurements (run against the live stack):
+
+| Question | Result |
+| --- | --- |
+| Consumer saved events per second | 0.545/s during sustained test |
+| Kafka events waiting in the consumer lag | 0 |
+| Duplicate events in the last 10 minutes | 3 |
+
 ## Day 74: Prometheus monitoring
 
 Prometheus pulls `/metrics` every five seconds. The backend exports the current
