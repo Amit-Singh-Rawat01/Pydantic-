@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import random
 import sys
 import threading
 import time
@@ -8,7 +9,7 @@ import time
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
 from pydantic import ValidationError
-from prometheus_client import Counter, Gauge, start_http_server
+from prometheus_client import Counter, Gauge, Histogram, start_http_server
 from redis_counters import count_error
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import OperationalError
@@ -33,6 +34,11 @@ EVENTS = Counter(
 LAG = Gauge(
     "consumer_lag",
     "Kafka events queued but not yet fetched by this consumer",
+)
+EVENT_SECONDS = Histogram(
+    "consumer_event_seconds",
+    "Ek event ko process karne mein kitna time laga",
+    buckets=(0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0),
 )
 
 for result in ("saved", "duplicate", "rejected", "db_error"):
@@ -175,133 +181,141 @@ while True:
     try:
         saved_this_run = 0
         for message in consumer:
-            db = None
-            raw_message = message.value
+            commit_event = False
+            with EVENT_SECONDS.time():
+                if os.path.exists("slow.on") and random.random() < 0.02:
+                    time.sleep(0.2)
 
-            try:
-                error_data = json.loads(raw_message.decode("utf-8"))
-
-                print(f"Received from Kafka: {error_data}")
-
-                if not isinstance(error_data, dict):
-                    raise ValueError("Kafka message must contain a JSON object")
-
-                validated_event = ErrorEventSchema(**error_data)
-
-                fp = generate_fingerprint(
-                    service_name=validated_event.service_name,
-                    error_type=validated_event.error_type,
-                )
+                db = None
+                raw_message = message.value
 
                 try:
-                    db = SessionLocal()
+                    error_data = json.loads(raw_message.decode("utf-8"))
 
-                    stmt = pg_insert(models.Error).values(
+                    print(f"Received from Kafka: {error_data}")
+
+                    if not isinstance(error_data, dict):
+                        raise ValueError("Kafka message must contain a JSON object")
+
+                    validated_event = ErrorEventSchema(**error_data)
+
+                    fp = generate_fingerprint(
                         service_name=validated_event.service_name,
                         error_type=validated_event.error_type,
-                        message=validated_event.message,
-                        severity=validated_event.severity.value,
-                        stack_trace=validated_event.stack_trace,
-                        occurred_at=validated_event.occurred_at,
-                        fingerprint=fp,
-                        kafka_partition=message.partition,
-                        kafka_offset=message.offset,
-                    )
-                    stmt = stmt.on_conflict_do_nothing(
-                        index_elements=[
-                            "kafka_partition",
-                            "kafka_offset",
-                        ]
                     )
 
-                    insert_result = db.execute(stmt)
+                    try:
+                        db = SessionLocal()
+
+                        stmt = pg_insert(models.Error).values(
+                            service_name=validated_event.service_name,
+                            error_type=validated_event.error_type,
+                            message=validated_event.message,
+                            severity=validated_event.severity.value,
+                            stack_trace=validated_event.stack_trace,
+                            occurred_at=validated_event.occurred_at,
+                            fingerprint=fp,
+                            kafka_partition=message.partition,
+                            kafka_offset=message.offset,
+                        )
+                        stmt = stmt.on_conflict_do_nothing(
+                            index_elements=[
+                                "kafka_partition",
+                                "kafka_offset",
+                            ]
+                        )
+
+                        insert_result = db.execute(stmt)
+
+                        if insert_result.rowcount:
+                            check_and_create_incident(
+                                db,
+                                validated_event.service_name,
+                                validated_event.error_type,
+                                validated_event.severity.value,
+                            )
+
+                            print(
+                                f"Saved to DB successfully. "
+                                f"Fingerprint: {fp}"
+                            )
+                        else:
+                            print(
+                                "[SKIP] pehle se delivered; duplicate Kafka message ignored: "
+                                f"partition={message.partition}, "
+                                f"offset={message.offset}"
+                            )
+
+                        db.commit()
+                        if not insert_result.rowcount:
+                            EVENTS.labels(result="duplicate").inc()
+                    except OperationalError as e:
+                        print(
+                            f"[DB WRITE FAILED] Database unreachable — "
+                            f"'{validated_event.service_name}' ka event save nahi hua."
+                        )
+                        if db:
+                            db.rollback()
+                        EVENTS.labels(result="db_error").inc()
+                        raise
+                    except Exception as e:
+                        print(
+                            f"[DB WRITE FAILED] Unexpected error saving "
+                            f"'{validated_event.service_name}': {e}"
+                        )
+                        if db:
+                            db.rollback()
+                        EVENTS.labels(result="db_error").inc()
+                        raise
 
                     if insert_result.rowcount:
-                        check_and_create_incident(
-                            db,
+                        count_error(
                             validated_event.service_name,
-                            validated_event.error_type,
-                            validated_event.severity.value,
+                            validated_event.occurred_at,
                         )
 
-                        print(
-                            f"Saved to DB successfully. "
-                            f"Fingerprint: {fp}"
-                        )
-                    else:
-                        print(
-                            "[SKIP] pehle se delivered; duplicate Kafka message ignored: "
-                            f"partition={message.partition}, "
-                            f"offset={message.offset}"
-                        )
+                        saved_this_run += 1
+                        EVENTS.labels(result="saved").inc()
+                        if CRASH_AFTER and saved_this_run == CRASH_AFTER:
+                            print(
+                                f"[CRASH] event #{saved_this_run} save hua, commit nahi hua",
+                                flush=True,
+                            )
+                            os._exit(1)
 
-                    db.commit()
-                    if not insert_result.rowcount:
-                        EVENTS.labels(result="duplicate").inc()
-                except OperationalError as e:
-                    print(
-                        f"[DB WRITE FAILED] Database unreachable — "
-                        f"'{validated_event.service_name}' ka event save nahi hua."
+                    commit_event = True
+
+                except (
+                    UnicodeDecodeError,
+                    json.JSONDecodeError,
+                    ValidationError,
+                    ValueError,
+                ) as e:
+                    print(f"[REJECTED] Invalid event skipped. Reason: {e}")
+                    rejected_saved = save_rejected_event(
+                        raw_message,
+                        f"{type(e).__name__}: {e}",
                     )
-                    if db:
-                        db.rollback()
-                    EVENTS.labels(result="db_error").inc()
-                    raise
+                    if not rejected_saved:
+                        raise RuntimeError(
+                            "Rejected event could not be persisted; offset not committed"
+                        )
+                    EVENTS.labels(result="rejected").inc()
+                    commit_event = True
+
                 except Exception as e:
-                    print(
-                        f"[DB WRITE FAILED] Unexpected error saving "
-                        f"'{validated_event.service_name}': {e}"
-                    )
                     if db:
                         db.rollback()
-                    EVENTS.labels(result="db_error").inc()
+
+                    print(f"Consumer error: {e}")
                     raise
 
-                if insert_result.rowcount:
-                    count_error(
-                        validated_event.service_name,
-                        validated_event.occurred_at,
-                    )
+                finally:
+                    if db:
+                        db.close()
 
-                    saved_this_run += 1
-                    EVENTS.labels(result="saved").inc()
-                    if CRASH_AFTER and saved_this_run == CRASH_AFTER:
-                        print(
-                            f"[CRASH] event #{saved_this_run} save hua, commit nahi hua",
-                            flush=True,
-                        )
-                        os._exit(1)
-
+            if commit_event:
                 committer.event_done()
-
-            except (
-                UnicodeDecodeError,
-                json.JSONDecodeError,
-                ValidationError,
-                ValueError,
-            ) as e:
-                print(f"[REJECTED] Invalid event skipped. Reason: {e}")
-                rejected_saved = save_rejected_event(
-                    raw_message,
-                    f"{type(e).__name__}: {e}",
-                )
-                if not rejected_saved:
-                    raise RuntimeError(
-                        "Rejected event could not be persisted; offset not committed"
-                    )
-                EVENTS.labels(result="rejected").inc()
-                committer.event_done()
-
-            except Exception as e:
-                if db:
-                    db.rollback()
-
-                print(f"Consumer error: {e}")
-                raise
-
-            finally:
-                if db:
-                    db.close()
     except KafkaError as error:
         print(
             f"[KAFKA RETRY] connection lost - "

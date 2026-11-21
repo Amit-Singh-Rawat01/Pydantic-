@@ -1,5 +1,82 @@
 # Error Intelligence Platform
 
+## Day 76: Consumer latency histogram
+
+Teen sawaal jo Day 75 ke Counter aur Gauge se nahi milte the:
+
+1. Consumer ek event ko aam taur par (p50) kitne ms mein nipta raha hai?
+2. Sabse dheere 1% events (p99) kitne ms lete hain?
+3. Jab 50 mein se 1 event dheema ho jaaye, to pehle average hilta hai ya p99?
+
+`consumer_event_seconds` har event ki processing time naapta hai; Kafka se
+message ka intezaar aur batch offset commit is timing ke bahar hain. Iske
+`_bucket` series cumulative hain (`le` = less than or equal), aur `_count` /
+`_sum` event count aur kul processing seconds dete hain.
+
+Raw bucket padhna: 10 ms tak hue events ki tadaad `le="0.01"` bucket hai.
+Average `_sum / _count` hai. Haath se p99 ke liye `_count * 0.99` nikaalo,
+phir pehla aisa `le` bucket chuno jiska cumulative count us rank tak pahunchta
+ho. Ye bucket-based andaaza hai; `+Inf` se aage exact latency nahi milti.
+
+Example (sample numbers, live measurement nahi): 480 events `le="0.01"` tak,
+497 `le="0.025"` tak, `_count=500`, `_sum=3.1` seconds. Average
+`3.1 / 500 = 0.0062` seconds (6.2 ms); p99 rank `500 * 0.99 = 495`,
+isliye haath ka p99 dibba `le="0.025"` (10-25 ms) hai. Prometheus p99 isi
+histogram se niklega aur bucket estimate ke aaspaas hona chahiye.
+
+Prometheus Graph mein:
+
+```promql
+histogram_quantile(0.50, sum by (le) (rate(consumer_event_seconds_bucket[1m])))
+histogram_quantile(0.95, sum by (le) (rate(consumer_event_seconds_bucket[1m])))
+histogram_quantile(0.99, sum by (le) (rate(consumer_event_seconds_bucket[1m])))
+rate(consumer_event_seconds_sum[1m]) / rate(consumer_event_seconds_count[1m])
+increase(consumer_event_seconds_count[5m])
+sum(increase(consumer_events_total[5m]))
+```
+
+`p99_processing_latency` is represented by the p99 PromQL query above; the
+exported source metric remains the `consumer_event_seconds` histogram. Expect
+p50 <= p95 <= p99. The histogram count and summed result Counter should be
+approximately equal when no event fails before completion. A `NaN` quantile
+means the selected rate window had no observations.
+Expected slow-switch behavior: 2% of events are deliberately delayed, so p99
+should rise toward the `0.1`-to-`0.25` second bucket while p50 and usually p95
+stay near their normal range; the average rises, but typically much less than
+p99. This answers question 3: **p99 moves first and much more noticeably than
+the average**. Replace the `Not measured` cells below with the three live
+BEFORE/DURING/AFTER readings.
+
+| Measurement | p50 | p95 | p99 | Average |
+| --- | ---: | ---: | ---: | ---: |
+| BEFORE (`slow.on` absent) | Not measured | Not measured | Not measured | Not measured |
+| DURING (`slow.on` present) | Not measured | Not measured | Not measured | Not measured |
+| AFTER (`slow.on` removed) | Not measured | Not measured | Not measured | Not measured |
+
+Hand-count and Prometheus comparison (fill in from `/metrics` and PromQL):
+
+| Check | Result |
+| --- | --- |
+| Events at or below 10 ms | Not measured |
+| Hand-calculated average | Not measured |
+| Hand-calculated p99 bucket | Not measured |
+| Prometheus p99 | Not measured |
+| Histogram `_count` vs result Counter total | Not measured |
+
+Run the three simulator processes, record the four values after each three
+minute interval, and compare the raw p99 bucket with the Prometheus p99. The
+optional `slow.on` switch makes 2% of events sleep for 200 ms; in Docker it
+must be created inside the consumer container:
+
+```sh
+docker compose exec consumer touch slow.on
+docker compose exec consumer rm slow.on
+```
+
+For a locally run consumer, create/remove `slow.on` in its working directory.
+Average can move only a little while p99 rises sharply because the slowest
+events affect the tail directly.
+
 ## Day 75: Consumer metrics
 
 The consumer exports labelled Prometheus metrics on port `8001`:
@@ -10,6 +87,9 @@ consumer_events_total{result="duplicate"}
 consumer_events_total{result="rejected"}
 consumer_events_total{result="db_error"}
 consumer_lag
+consumer_event_seconds_bucket{le="0.01"}
+consumer_event_seconds_count
+consumer_event_seconds_sum
 ```
 
 Useful PromQL:

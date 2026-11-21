@@ -44,7 +44,9 @@ class ConsumerOffsetTests(unittest.TestCase):
 
         self.assertEqual(len(kafka_commit_calls), 1)
         self.assertIn("committer = BatchCommitter(consumer)", self.source)
-        self.assertEqual(self.source.count("committer.event_done()"), 2)
+        self.assertEqual(self.source.count("committer.event_done()"), 1)
+        self.assertEqual(self.source.count("commit_event = True"), 2)
+        self.assertIn("if commit_event:", self.source)
         self.assertIn("self.pending >= self.every", self.source)
         self.assertIn("self.interval", self.source)
         self.assertIn("rejected_saved = save_rejected_event", self.source)
