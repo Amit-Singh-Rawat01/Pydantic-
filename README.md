@@ -1,5 +1,74 @@
 # Error Intelligence Platform
 
+## Day 77: Grafana Pipeline Health dashboard
+
+Teen sawaal jin ka jawab ek hi time-axis par dashboard se dekha ja sakta hai:
+
+1. Pichhle 15 minute mein consumer kab-kab dheema ya band tha?
+2. Consumer dheema ho jaaye (`slow.on`) to kaunse number badalte hain aur
+   kaunse nahi?
+3. Consumer mar jaaye to kya dikhta hai, aur kya "mara hua" aur "dheema" ek
+   jaise dikhte hain?
+
+Grafana Prometheus se `http://prometheus:9090` par judta hai. Docker Compose
+network mein `localhost` Grafana container khud hota hai, isliye datasource
+provisioning compose service name `prometheus` use karti hai. `grafana-data`
+Grafana ka state rakhta hai; datasource, dashboard provider aur dashboard JSON
+repo mein hain. Grafana UI `http://localhost:3000` par kholein.
+
+```sh
+docker compose up -d grafana
+```
+
+Pehli login `admin` / `admin` hai. Provisioned **Pipeline Health** dashboard
+mein paanch panels hain: speed (result ke hisaab se events/sec), consumer lag,
+latency p50/p95/p99, scrape `up` status, aur `hub_last_ok_age_seconds`.
+Default time range 15 minute aur refresh 5 second hai. `up` ka alag panel
+zaroori hai: scrape band hone par baaki consumer metrics `0` ke bajaye
+`No data` ho sakte hain.
+
+Dashboard ki JSON file: [`grafana/pipeline-health.json`](grafana/pipeline-health.json).
+Grafana datasource aur dashboard startup provisioning:
+[`grafana/provisioning/`](grafana/provisioning/).
+
+**Live observations:**
+
+- NORMAL: saved speed `0.8546` events/sec, lag `0`, p50 `0.03777 s`, p95
+  `0.04927 s`, p99 `0.17950 s`, aur consumer `up=1`.
+- DHEEMA (`slow.on`): saved speed `0.8364` events/sec, lag `0`, p50
+  `0.03778 s`, p95 `0.04928 s`, p99 `0.18100 s`, aur consumer `up=1`. Is run
+  mein p99 mein sirf chhota sa movement tha; p50 aur p95 stable rahe.
+- MARA HUA (`docker compose stop consumer`, 2 minute): speed, lag aur latency
+  queries mein koi series nahi mili; consumer `up=0`. Ye `0` ke bajaye
+  `No data` behavior tha.
+- WAPSI (consumer restart, 3 minute): saved speed `0.8001` events/sec,
+  lag `0`, p50 `0.03810 s`, p95 `0.04988 s`, p99 `0.08899 s`, aur
+  consumer `up=1`. Lag ka pahaad is run mein dashboard pe dekha gaya.
+
+| Sawaal / live observation | Jawab |
+| --- | --- |
+| Pichhle 15 minute mein kab dheema ya band tha? | DHEEMA interval mein p99 uthne aur MARA HUA interval mein consumer `up=0` hua. |
+| Dheema hone par kya badla? | p99 thoda utha; p50/p95, speed, lag aur `up` stable/UP rahe. |
+| Marne par kya badla, aur dheema se farq? | `up=0`, speed/lag/latency par `No data`; dheema mein service UP tha aur tail latency badhi. |
+| Wapsi par lag ka pahaad dikha? | Haan, consumer restart ke baad Lag panel mein value spikes aur recovery dikhai. |
+
+Live observation screenshot: ![Pipeline Health dashboard](docs/pipeline-health.png)
+
+Teeno producers chala kar dashboard par NORMAL 3 minute dekhein; DHEEMA ke liye
+`docker compose exec consumer touch slow.on` karke 3 minute dekhein. MARA HUA
+se pehle switch hata kar consumer rokein, 2 minute baad wapas chalaein, phir
+3 minute dekhein:
+
+```sh
+docker compose exec consumer rm slow.on
+docker compose stop consumer
+# 2 minute intezaar
+docker compose start consumer
+```
+
+In chaaron phases ko ek 15-minute view mein capture karein. Consumer ko
+alag se band karne par stack ko test ke baad dobara chalana na bhoolein.
+
 ## Day 76: Consumer latency histogram
 
 Teen sawaal jo Day 75 ke Counter aur Gauge se nahi milte the:

@@ -25,6 +25,20 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
 
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/pipeline-health.json:/var/lib/grafana/dashboards/pipeline-health.json:ro
+
   backend:
     build: .
     restart: always
@@ -109,3 +123,4 @@ volumes:
   pgdata:
   kafka-data:
   prometheus-data:
+  grafana-data:
