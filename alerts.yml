@@ -1,0 +1,27 @@
+groups:
+  - name: pipeline
+    interval: 5s
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 15s
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} band hai (up = 0)"
+
+      - alert: ConsumerSlow
+        expr: histogram_quantile(0.99, sum by (le) (rate(consumer_event_seconds_bucket[1m]))) > 0.18
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Consumer ka p99 180 ms se upar hai"
+
+      - alert: ConsumerLagHigh
+        expr: consumer_lag > 200
+        for: 15s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Line mein {{ $value }} events jama hain"

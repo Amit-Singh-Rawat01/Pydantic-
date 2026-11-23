@@ -1,5 +1,55 @@
 # Error Intelligence Platform
 
+## Day 78: Prometheus alert rules
+
+Teen sawaal jin ka jawab ab alarm deta hai:
+
+1. Consumer mar jaaye to maarne se `FIRING` tak kitne second lagte hain?
+2. Consumer dheema ho (`slow.on`) to kaunsa alarm bajta hai, aur kya `TargetDown`
+   chup rehta hai?
+3. Events jama hon to `TargetDown` aur `ConsumerLagHigh` kis order mein aate hain?
+
+Purane tareeke mein Grafana band ho aur deewar koi na dekhe, to consumer marne
+par humein pata nahi chalega jab tak hum khud dashboard na kholein. Prometheus
+ab har 5 second mein niyam jaanchta hai: condition sach ho to alarm `PENDING`,
+aur `for` ka waqt poora hone tak sach rahe to `FIRING`. Scrape (5 s), evaluation
+(5 s) aur `for` milkar detection ka samay banate hain. Ye rules sirf Prometheus
+aur Grafana mein dikhte hain; phone, email, Slack ya Alertmanager configure
+nahi kiya gaya hai.
+
+Rules [`alerts.yml`](alerts.yml) mein hain aur Prometheus ise
+[`prometheus.yml`](prometheus.yml) se load karta hai. `TargetDown` har scraped
+job (`prometheus`, `backend`, `consumer`) ko dekhta hai (`up == 0`),
+`ConsumerSlow` consumer p99, aur `ConsumerLagHigh` queued events ko:
+
+| Alarm | Condition | `for` | Threshold ka kaaran |
+| --- | --- | --- | --- |
+| `TargetDown` | `up == 0` | 15 s | Scrape/evaluation 5 s; ek chhote scrape hiccup par turant nahi bajta. |
+| `ConsumerSlow` | p99 > 0.18 s | 1 min | Day 77 ke observed p99 `0.17950 s` normal aur `0.18100 s` slow ke beech; p99 estimate ko sthir rehne ka waqt diya. |
+| `ConsumerLagHigh` | `consumer_lag > 200` | 15 s | Normal lag `0` tha; 200 events ka persistent backlog demo threshold hai. |
+
+`ConsumerSlow` ka 0.18 s threshold recorded normal/slow p99 ke beech bahut
+qareeb hai; workload aur histogram estimate badalne par ise apne fresh BEFORE /
+DURING readings ke hisaab se tune karein. Rule health `/rules` par aur
+`PENDING`/`FIRING` `/alerts` par dekhein. Grafana **Pipeline Health** dashboard
+mein `Alarm (firing)` count aur `Alarm timeline` panels hain.
+
+Q1 ke teen naap running Compose stack par liye gaye. Q2 aur Q3 abhi live test
+nahi hue: check ke waqt histogram p99 `NaN` tha aur consumer lag `0` tha, isliye
+slow ya backlog condition nahi bani. Neeche expected behavior ko live
+measurement se alag rakha hai.
+
+| Sawaal | Jawab / measurement |
+| --- | --- |
+| Q1: consumer stop se TargetDown FIRING tak | Teen runs: `26.3`, `26.3`, `26.4` s (min/avg/max `26.3 / 26.3 / 26.4`); `5 + 5 + 15 = 25` s se lagbhag 1.3 s zyada. |
+| Q2: slow consumer | `ConsumerSlow` expected hai; consumer UP rehta hai, isliye `TargetDown` inactive rehna chahiye. Live FIRING timing: Not measured. |
+| Q3: pile-up | Consumer band rahe to pehle `TargetDown` FIRING; consumer wapas aane par `TargetDown` inactive aur lag 200 se upar rahe to `ConsumerLagHigh` PENDING → FIRING; lag girne par inactive. Live order: Not measured. |
+
+Dashboard JSON: [`grafana/pipeline-health.json`](grafana/pipeline-health.json).
+Consumer stopped / `slow.on` / backlog scenarios chala kar Alarm panel laal ho
+tab screenshot `docs/alarms.png` mein capture karein; screenshot abhi generate
+nahi hua hai.
+
 ## Day 77: Grafana Pipeline Health dashboard
 
 Teen sawaal jin ka jawab ek hi time-axis par dashboard se dekha ja sakta hai:
