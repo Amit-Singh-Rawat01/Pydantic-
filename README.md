@@ -34,21 +34,18 @@ DURING readings ke hisaab se tune karein. Rule health `/rules` par aur
 `PENDING`/`FIRING` `/alerts` par dekhein. Grafana **Pipeline Health** dashboard
 mein `Alarm (firing)` count aur `Alarm timeline` panels hain.
 
-Q1 ke teen naap running Compose stack par liye gaye. Q2 aur Q3 abhi live test
-nahi hue: check ke waqt histogram p99 `NaN` tha aur consumer lag `0` tha, isliye
-slow ya backlog condition nahi bani. Neeche expected behavior ko live
-measurement se alag rakha hai.
+Q1, Q2 aur Q3 running Compose stack par live test kiye gaye. Q2 ke synthetic
+events aur Q3 ke backlog events test ke liye bheje gaye; Q3 drain ke baad
+teeno alerts wapas inactive hue.
 
 | Sawaal | Jawab / measurement |
 | --- | --- |
 | Q1: consumer stop se TargetDown FIRING tak | Teen runs: `26.3`, `26.3`, `26.4` s (min/avg/max `26.3 / 26.3 / 26.4`); `5 + 5 + 15 = 25` s se lagbhag 1.3 s zyada. |
-| Q2: slow consumer | `ConsumerSlow` expected hai; consumer UP rehta hai, isliye `TargetDown` inactive rehna chahiye. Live FIRING timing: Not measured. |
-| Q3: pile-up | Consumer band rahe to pehle `TargetDown` FIRING; consumer wapas aane par `TargetDown` inactive aur lag 200 se upar rahe to `ConsumerLagHigh` PENDING → FIRING; lag girne par inactive. Live order: Not measured. |
+| Q2: slow consumer | 2 test events/s par `ConsumerSlow` pehle `25.4 s` mein PENDING hua aur p99 ke threshold ke neeche aane se `for: 1m` reset hua; `225.1 s` mein FIRING hua (p99 `0.2106 s`). `TargetDown` poore test mein inactive raha. |
+| Q3: pile-up | Consumer stop ke `24.4 s` baad `TargetDown` FIRING. 6,000 queued events ke saath consumer restart ke `34.3 s` baad `TargetDown` inactive aur `ConsumerLagHigh` PENDING (lag `5,708`); `50.4 s` par FIRING (lag `5,406`). Lag 200 se neeche drain hone par `ConsumerLagHigh` inactive hua. |
 
 Dashboard JSON: [`grafana/pipeline-health.json`](grafana/pipeline-health.json).
-Consumer stopped / `slow.on` / backlog scenarios chala kar Alarm panel laal ho
-tab screenshot `docs/alarms.png` mein capture karein; screenshot abhi generate
-nahi hua hai.
+![Grafana alarm panels with firing alerts](docs/alarms.png)
 
 ## Day 77: Grafana Pipeline Health dashboard
 
