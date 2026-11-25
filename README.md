@@ -1,5 +1,85 @@
 # Error Intelligence Platform
 
+## Day 80: Collector backpressure
+
+Teen sawaal:
+
+1. Bheed aur dheema Kafka mein ek event ko `202` milne mein kitna time lagta hai (`p99`)?
+2. Kitne requests ko `202` mila aur kitne ko `429`?
+3. `429` ke baad service us event ka kya karti hai: kho jaata hai ya dobara jaata hai?
+
+Collector ab 8 bounded in-flight slots rakhta hai:
+
+- Khali slot hai: event Kafka publish ko bheja jaata hai aur `202` milta hai.
+- 8 slots bhare hain: turant `429` aur `Retry-After: 1` milta hai.
+- Client `429`/`503` par Retry-After ke hisaab se backoff aur jitter ke saath retry karta hai.
+- `4xx` errors retry nahi kiye jaate; sirf retryable overload responses retry hote hain.
+
+BEFORE/AFTER load measurements:
+
+| Measurement | BEFORE (slow Kafka, no backpressure) | AFTER (slow Kafka, 8 slots) |
+| --- | --- | --- |
+| 202 / 429 count | 2707 / 1168 | 240 / 3525 |
+| 202 p50/p99 | 137 ms / 323 ms | 332 ms / 4276 ms |
+| 429 p50/p99 | 116 ms / 2202 ms | 130 ms / 2235 ms |
+| `total-errors` delta vs 202 count | 0 / 2707 (blocked by consumer startup/backlog) | 0 / 240 (blocked by consumer startup/backlog) |
+| In-flight / throttled | 0 / 4777 total | 0 / 4777 total |
+| Retry mode | - | 191 202, 1 -1 |
+| Chain regression | - | `chain_test` 1-round run: FAIL_DETECTION (live anomaly baseline/spike did not open an incident) |
+
+Create the fake slow-Kafka switch in the collector working directory:
+
+```sh
+touch slow_kafka.on
+python ingest_load.py 10 100
+python ingest_load.py 10 20 retry
+rm slow_kafka.on
+```
+
+`slow_kafka.on` must remain untracked. Capacity is `8 slots / 0.2 seconds =
+40 events/sec`; slot count should stay near the thread pool size.
+
+Grafana mein **Ingest speed** automatically `throttled` line dikhata hai aur
+naya **In-flight** panel `ingest_in_flight` dikhata hai.
+
+Gap: ye nakli Kafka delay hai. Asli Kafka band aur producer buffer hone par
+collector turant bheed na dekhe aur buffer badhta jaaye.
+
+## Day 79: Collector ingestion gate
+
+Teen sawaal:
+
+1. Galat event ab Kafka ya consumer tak jaane ke bajay collector ke strict Pydantic
+   schema par `422` se rukta hai. Sirf valid events line mein jaati hain.
+2. Darwaze ka p50/p99 live ingestion histogram se Grafana **Ingest latency**
+   panel mein dekhein.
+3. Kafka band ho aur existing buffer use ho to valid event `202` mil sakta hai;
+   Kafka call exception kare to `503` aur `kafka_error` milta hai. Collector/
+   Kafka response time live metrics se record hota hai.
+
+Naya ingestion route:
+
+`Payment -> POST /v1/ingest -> Kafka -> consumer -> Postgres`
+
+Paanchon strict-schema tests Swagger se collect karke dashboard ke
+`ingest_events_total{result="invalid"}` par verify karne hain.
+
+Chain test aur runtime measurements:
+
+| Measurement | Result |
+| --- | --- |
+| Ingest p50/p99 | `Run collector and inspect Grafana` |
+| Kafka down: status/time | `Run the Kafka-down test and record response` |
+| Rejected Events before/after | `Record before and after invalid ingestion tests` |
+| chain_test vs Day 59 | `Run all three rounds and compare CSV` |
+| Collector TargetDown | `Measure alert FIRING delay after Ctrl+C` |
+
+Collector ko `uvicorn collector:app --port 8002` se chalaya jaata hai.
+Grafana panels **Ingest speed** aur **Ingest latency** ka data
+`/v1/ingest` aur `/metrics` se aata hai.
+
+![Collector metrics and chain screenshot](docs/collector-ingest.png)
+
 ## Day 78: Prometheus alert rules
 
 Teen sawaal jin ka jawab ab alarm deta hai:

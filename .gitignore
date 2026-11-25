@@ -4,3 +4,4 @@ __pycache__/
 .env
 *.flag
 slow.on
+slow_kafka.on
