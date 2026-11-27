@@ -40,18 +40,21 @@ hogi. `slow_response.on` hata kar live result yahan darj karein:
 
 | Check | Result |
 | --- | --- |
-| BEFORE: 1 event, 3 accepted Kafka messages, DB row delta | Not measured |
+| BEFORE simulation: 3 requests with fresh IDs, DB row delta | 3 (`dup-test`: 2 -> 5); all 3 client requests timed out |
 | Day 41 duplicate key | Kafka partition + offset |
 | Producer event ID before this day | Nahi; producer ID nahi lagata/badalta |
-| AFTER: same event ID sent 3 times, DB row delta | Not measured; expected 1 |
-| Retry + consumer crash: 202 count X / DB row delta | Not measured |
-| Duplicate counter increase | Not measured |
-| `chain_test.py` one round | Not measured |
+| AFTER: same event ID retried 3 times, DB row delta | 1 (`dup-test`: 1 -> 2); client returned `False` after 3 timeouts |
+| AFTER duplicate counter increase | 2 |
+| Retry + consumer crash: 202 count X / DB row delta | X = 1,215; DB delta = 1,215, `-1` = 0, consumer lag = 0 |
+| Consumer duplicate counter after crash run | 38 |
+| `chain_test.py` one round | PASS; detection 30 s, recovery 91 s |
 
 `db/001_event_id.sql` migration column/index banati hai. Backend startup bhi
 existing database ke liye idempotent `ALTER TABLE`/index ensure karta hai.
 Python 3.14 `uuid.uuid7()` use karta hai; older Python par `uuid6` package ka
-UUIDv7 fallback use hota hai. Code deploy karne ke liye
+UUIDv7 fallback use hota hai. BEFORE measurement current schema par teen
+distinct IDs bhejkar old per-request-ID behavior simulate karta hai; AFTER
+measurement client ke same-ID retries ka live run hai. Code deploy karne ke liye
 `docker compose up --build -d backend consumer` chalao; backend migration apply
 karega aur consumer nayi event ID ke saath rows save karega.
 
