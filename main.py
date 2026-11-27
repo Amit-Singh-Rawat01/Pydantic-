@@ -6,6 +6,7 @@ from typing import Literal, Optional
 from database import (
     Base,
     engine,
+    ensure_error_event_id_column,
     ensure_error_fingerprint_column,
     ensure_error_occurred_at_index,
     ensure_incident_fingerprint_column,
@@ -47,6 +48,7 @@ from baseline import calculate_anomaly_scores, calculate_baseline
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+ensure_error_event_id_column()
 ensure_error_fingerprint_column()
 ensure_error_occurred_at_index()
 ensure_incident_fingerprint_column()

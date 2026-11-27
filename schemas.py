@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Literal, Optional
 from datetime import datetime, timezone
 from enum import Enum
+from uuid import UUID
 
 
 Status = Literal["NORMAL", "WARNING", "ANOMALY", "NO_DATA"]
@@ -23,6 +24,7 @@ class ErrorEventSchema(BaseModel):
     occurred_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )
+    event_id: Optional[UUID] = None
 
 class ErrorCreate(BaseModel):
     service_name: str

@@ -1,5 +1,60 @@
 # Error Intelligence Platform
 
+## Day 81: Event ID idempotency
+
+Teen sawaal:
+
+1. Ek hi event ko collector par teen baar bhejne se Postgres mein kitni rows banti hain?
+2. Day 41 ka duplicate check retry ke naye Kafka message ko pakadta hai ya nahi?
+3. Consumer crash aur client retry dono saath ho to ek event ki ek row rehti hai?
+
+Audit: Day 41 ka check `(kafka_partition, kafka_offset)` unique pair par tika hai,
+jo wahi Kafka message dobara padhne par kaam karta hai. `safe_producer.send_event`
+event mein `event_id` nahi banata/replace karta. Ab client pehli request se pehle
+UUIDv7 banata hai; har retry wahi ID bhejti hai. Collector ID ko required UUID
+field ke roop mein validate karke `202` receipt mein wapas deta hai. `errors` ka
+nullable unique `event_id` index purane rows/legacy events ko support karta hai.
+
+Consumer ka `ON CONFLICT DO NOTHING` dono unique niyamon ko sambhalta hai:
+Kafka redelivery par offset key conflict, aur nayi retry message par event ID
+conflict. Sirf pehli insert incident/Redis/saved counters chalati hai; duplicate
+sirf `consumer_events_total{result="duplicate"}` badhata hai. Isliye database
+effect exactly-once hai, transport at-least-once.
+
+`slow_response.on` collector ko event publish/accept karne ke baad 3 second rokta
+hai, taaki 2-second client timeout ke baad wahi request retry ho. Switch
+`.gitignore` mein hai. Test:
+
+```text
+touch slow_response.on
+curl "http://localhost:8000/metrics/total-errors?service_name=dup-test"
+python dup_test.py
+curl "http://localhost:8000/metrics/total-errors?service_name=dup-test"
+rm slow_response.on
+```
+
+Isse pehle aur baad `GET /metrics/total-errors?service_name=dup-test` count
+likhein. Test code ko teen late responses ke baad `False` mil sakta hai; ID
+dedup sahi ho to row-count delta phir bhi 1 aur duplicate metric kam-se-kam 2
+hogi. `slow_response.on` hata kar live result yahan darj karein:
+
+| Check | Result |
+| --- | --- |
+| BEFORE: 1 event, 3 accepted Kafka messages, DB row delta | Not measured |
+| Day 41 duplicate key | Kafka partition + offset |
+| Producer event ID before this day | Nahi; producer ID nahi lagata/badalta |
+| AFTER: same event ID sent 3 times, DB row delta | Not measured; expected 1 |
+| Retry + consumer crash: 202 count X / DB row delta | Not measured |
+| Duplicate counter increase | Not measured |
+| `chain_test.py` one round | Not measured |
+
+`db/001_event_id.sql` migration column/index banati hai. Backend startup bhi
+existing database ke liye idempotent `ALTER TABLE`/index ensure karta hai.
+Python 3.14 `uuid.uuid7()` use karta hai; older Python par `uuid6` package ka
+UUIDv7 fallback use hota hai. Code deploy karne ke liye
+`docker compose up --build -d backend consumer` chalao; backend migration apply
+karega aur consumer nayi event ID ke saath rows save karega.
+
 ## Day 80: Collector backpressure
 
 Teen sawaal:

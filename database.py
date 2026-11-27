@@ -57,6 +57,19 @@ def ensure_error_occurred_at_index():
         )
 
 
+def ensure_error_event_id_column():
+    with engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE errors ADD COLUMN IF NOT EXISTS event_id UUID")
+        )
+        connection.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_errors_event_id "
+                "ON errors (event_id)"
+            )
+        )
+
+
 def ensure_incident_fingerprint_column():
     with engine.begin() as connection:
         connection.execute(

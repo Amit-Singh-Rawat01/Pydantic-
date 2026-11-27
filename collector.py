@@ -1,9 +1,9 @@
 import asyncio
 import os
 import time
-import uuid
 from datetime import datetime
 from typing import Literal, Optional
+from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.exception_handlers import request_validation_exception_handler
@@ -52,6 +52,7 @@ class IngestEvent(BaseModel):
     severity: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
     stack_trace: Optional[str] = Field(default=None, max_length=20000)
     occurred_at: datetime
+    event_id: UUID
 
 
 @app.get("/metrics")
@@ -80,7 +81,6 @@ async def ingest(event: IngestEvent):
         with IN_FLIGHT.track_inprogress():
             with INGEST_SECONDS.time():
                 payload = event.model_dump(mode="json")
-                payload["event_id"] = str(uuid.uuid4())
                 try:
                     await asyncio.to_thread(publish, payload)
                 except Exception as error:
@@ -91,4 +91,6 @@ async def ingest(event: IngestEvent):
                         detail="Kafka tak nahi pahunch paaye",
                     )
     INGEST.labels(result="accepted").inc()
-    return {"status": "accepted"}
+    if os.path.exists("slow_response.on"):
+        await asyncio.sleep(3)
+    return {"status": "accepted", "event_id": str(event.event_id)}

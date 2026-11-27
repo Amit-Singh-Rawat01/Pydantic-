@@ -3,6 +3,11 @@ import random
 import time
 from datetime import datetime, timezone
 
+try:
+    from uuid import uuid7
+except ImportError:
+    from uuid6 import uuid7
+
 import requests
 from requests.adapters import HTTPAdapter
 
@@ -12,12 +17,17 @@ session = requests.Session()
 session.mount("http://", HTTPAdapter(pool_maxsize=100))
 
 
+def new_event_id() -> str:
+    return str(uuid7())
+
+
 def send_event(event: dict, max_tries: int = 8) -> bool:
     payload = dict(event)
     payload.setdefault(
         "occurred_at",
         datetime.now(timezone.utc).isoformat(),
     )
+    payload["event_id"] = str(payload.get("event_id") or uuid7())
     body = json.dumps(payload, default=str)
     for attempt in range(1, max_tries + 1):
         try:

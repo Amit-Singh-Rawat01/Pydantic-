@@ -51,13 +51,15 @@ class ConsumerOffsetTests(unittest.TestCase):
         self.assertIn("self.interval", self.source)
         self.assertIn("rejected_saved = save_rejected_event", self.source)
 
-    def test_postgres_insert_is_idempotent_by_kafka_coordinates(self):
+    def test_postgres_insert_is_idempotent_by_event_id_and_kafka_coordinates(self):
         self.assertIn("pg_insert(models.Error)", self.source)
         self.assertIn("kafka_partition=message.partition", self.source)
         self.assertIn("kafka_offset=message.offset", self.source)
+        self.assertIn("event_id=validated_event.event_id", self.source)
         self.assertIn("stmt.on_conflict_do_nothing(", self.source)
-        self.assertIn('"kafka_partition"', self.source)
-        self.assertIn('"kafka_offset"', self.source)
+        self.assertIn('Index("uq_errors_event_id", "event_id", unique=True)', (
+            CONSUMER_PATH.parent / "models.py"
+        ).read_text(encoding="utf-8"))
 
     def test_duplicate_delivery_skips_incident_and_realtime_counters(self):
         guarded_blocks = [
@@ -105,7 +107,7 @@ class ConsumerOffsetTests(unittest.TestCase):
             crash_position,
         )
         self.assertIn("saved_this_run == CRASH_AFTER", self.source)
-        self.assertIn('"[SKIP] pehle se delivered;', self.source)
+        self.assertIn('"[SKIP] duplicate event ignored:', self.source)
 
 
 if __name__ == "__main__":

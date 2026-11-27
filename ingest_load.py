@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from ingest_client import send_event
+from ingest_client import new_event_id, send_event
 
 
 URL = "http://localhost:8002/v1/ingest"
@@ -23,6 +23,7 @@ def make_event(i):
         "message": f"ingest load test {i}",
         "severity": "LOW",
         "occurred_at": datetime.now(timezone.utc).isoformat(),
+        "event_id": new_event_id(),
     }
 
 

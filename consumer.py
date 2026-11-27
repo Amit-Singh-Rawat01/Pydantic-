@@ -217,13 +217,9 @@ while True:
                             fingerprint=fp,
                             kafka_partition=message.partition,
                             kafka_offset=message.offset,
+                            event_id=validated_event.event_id,
                         )
-                        stmt = stmt.on_conflict_do_nothing(
-                            index_elements=[
-                                "kafka_partition",
-                                "kafka_offset",
-                            ]
-                        )
+                        stmt = stmt.on_conflict_do_nothing()
 
                         insert_result = db.execute(stmt)
 
@@ -241,9 +237,10 @@ while True:
                             )
                         else:
                             print(
-                                "[SKIP] pehle se delivered; duplicate Kafka message ignored: "
+                                "[SKIP] duplicate event ignored: "
                                 f"partition={message.partition}, "
-                                f"offset={message.offset}"
+                                f"offset={message.offset}, "
+                                f"event_id={validated_event.event_id}"
                             )
 
                         db.commit()

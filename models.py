@@ -3,11 +3,13 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.sql import func
 from database import Base
 from datetime import datetime, timezone
@@ -20,6 +22,7 @@ class Error(Base):
             "kafka_offset",
             name="uq_kafka_partition_offset",
         ),
+        Index("uq_errors_event_id", "event_id", unique=True),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -32,6 +35,7 @@ class Error(Base):
     fingerprint = Column(String, index=True)  
     kafka_partition = Column(Integer, nullable=True)
     kafka_offset = Column(BigInteger, nullable=True)
+    event_id = Column(PGUUID(as_uuid=True), nullable=True)
 
 
 class Incident(Base):
