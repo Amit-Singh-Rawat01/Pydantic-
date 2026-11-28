@@ -5,6 +5,8 @@ import time
 
 import requests
 
+from ingest_client import send_event as send_to_ingest
+
 API_URL = "http://127.0.0.1:8000/errors"
 TICK = 0.5
 NORMAL_CHANCE = 0.005
@@ -67,6 +69,13 @@ def make_event(service_name, error):
 
 
 def send_event(event):
+    if event["service_name"] == "payment-service":
+        sent = send_to_ingest(event)
+        print(
+            f"[{event['service_name']}] {event['severity']:<8} "
+            f"{event['error_type']} -> {'202' if sent else 'failed'}"
+        )
+        return
     try:
         response = requests.post(API_URL, json=event, timeout=3)
         print(

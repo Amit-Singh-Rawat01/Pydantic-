@@ -15,3 +15,7 @@ scrape_configs:
     scrape_interval: 5s
     static_configs:
       - targets: ["consumer:8001"]
+  - job_name: "collector"
+    scrape_interval: 5s
+    static_configs:
+      - targets: ["host.docker.internal:8002"]

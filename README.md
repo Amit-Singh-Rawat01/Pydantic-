@@ -1,5 +1,54 @@
 # Error Intelligence Platform
 
+## Day 82: Per-service token bucket rate limit
+
+Teen sawaal:
+
+1. Ek service flood kare to shaant service ke kitne parcels andar jaate hain?
+2. Kis service ko kitni baar rate limit ki wajah se roka gaya?
+3. Asli spike har second kitne parcels bhejti hai?
+
+Collector ab har service ke liye alag token bucket rakhta hai: `RATE = 20`
+events/sec, `BURST = 20`. Schema validation ke baad aur shared 8 in-flight slots
+se pehle bucket check hota hai. Token na ho to collector `429` aur
+`Retry-After` deta hai; client wahi `event_id` rakhkar retry karta hai.
+`ingest_rate_limited_total{service="..."}` sirf per-service rate-limit rejects
+ginata; shared-slot backpressure ka `throttled` result alag rehta hai.
+
+Bucket collector process ki memory mein hai, isliye multiple collector workers
+ya replicas par limit share nahi hoti. Is demo mein service identity request ke
+`service_name` par nirbhar hai; production mein ise authenticated API key ya
+equivalent identity se lena chahiye. Metric label cardinality ko 50 service
+buckets ke baad `_other` bucket se bound kiya gaya hai.
+
+`noisy_test.py` ek noisy service ke 20 request threads aur ek quiet service ke
+har 0.5 second ke request ko 20 seconds tak compare karta hai. Baseline ke liye
+pehle rate limit ke bina version par `slow_kafka.on` ke saath ise chalayein;
+phir rate limiting ke saath wahi test dobara chalayein. Windows par local
+collector ko Compose Kafka ke host listener `localhost:29092` se jodein.
+`slow_kafka.on` collector ke working directory mein hona chahiye:
+
+```powershell
+$env:KAFKA_BOOTSTRAP_SERVERS = "localhost:29092"
+uvicorn collector:app --port 8002
+New-Item slow_kafka.on -ItemType File
+python noisy_test.py
+Remove-Item slow_kafka.on
+```
+
+Kafka, consumer, Prometheus aur Grafana bhi chalne chahiye. Grafana **Pipeline
+Health** mein **Rate limit se roke gaye** panel
+`sum by (service) (rate(ingest_rate_limited_total[1m]))` dikhata hai; pehli
+rejection se pehle `No data` expected hai.
+
+| Measurement | BEFORE | AFTER |
+| --- | --- | --- |
+| `noisy-test` output | bheje=4,348; accepted=747 (17%); 429=3,601 | bheje=5,543; accepted=403 (7%); 429=5,140 |
+| `quiet-test` output | bheje=38; accepted=5 (13%); 429=33 | bheje=29; accepted=28 (97%); 429=1 |
+| `ingest_rate_limited_total{service="noisy-test"}`; shared-slot `throttled` | Not applicable | 5,124; 17 |
+| Spike speed (`sum(rate(ingest_events_total[1m]))`) | Not recorded | Peak 1.964 events/sec during `chain_test.py` |
+| `chain_test.py` incident | Day 81: 1 round PASS; detection 30 s, recovery 91 s | 3/3 PASS; detection avg 60 s (58-61), recovery avg 90 s (90-91) |
+
 ## Day 81: Event ID idempotency
 
 Teen sawaal:

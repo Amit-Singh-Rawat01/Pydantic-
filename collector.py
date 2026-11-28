@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel, ConfigDict, Field
 
+from ratelimit import check_rate_limit
 from safe_producer import send_event as send_to_kafka
 
 
@@ -69,6 +70,10 @@ async def count_invalid(request, exc):
 
 @app.post("/v1/ingest", status_code=202)
 async def ingest(event: IngestEvent):
+    limited = check_rate_limit(event.service_name)
+    if limited:
+        return limited
+
     if SLOTS.locked():
         INGEST.labels(result="throttled").inc()
         raise HTTPException(
